@@ -1,0 +1,125 @@
+---
+title: "forecasting ED"
+author: "Janice Hsu"
+date: "2023-08-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(fpp3)
+library(hts)
+```
+
+
+```{r}
+data <- read.csv("HLTH0037_ts_cleaned.csv")
+```
+
+```{r}
+unique(data$Hospital_Hierarchy)
+```
+
+```{r}
+data1 <- data %>%
+  mutate(YearMonth = yearmonth(YearMonth)) %>%
+  as_tsibble(index = YearMonth, key = c(Age_Code, Sex_ItemName_ENG, Hospital_Code, Hospital_ItemName_ENG)) 
+
+data1 <- data1 %>%
+  mutate(Number = 1)
+```
+
+
+```{r}
+#Produce a table or plot to show the hierarchy between the organisation and hospital hierararchy
+
+# Assuming data is your hierarchical time series data
+data2 <- data1 %>%
+  select(YearMonth, Hospital_ItemName_ENG, Hospital_Hierarchy, Organisation, Number)
+```
+
+
+```{r}
+# Convert to data.table
+library(data.table)
+setDT(data2)
+
+# Create a hierarchical table using data.table operations
+hierarchical_table <- data2[, .(Total = sum(Number)), by = .(Hospital_Hierarchy, Organisation, Hospital_ItemName_ENG)]
+
+knitr::kable(hierarchical_table)
+
+```
+
+
+```{r}
+#Number of patients entering ED under different hospital hierarchy
+
+data1_hts <- data1 %>%
+  aggregate_key(Hospital_Hierarchy/Hospital_ItemName_ENG, Number = sum(Number))
+  
+data1_hts |>
+  filter(is_aggregated(Hospital_ItemName_ENG)) |>
+  autoplot(Number) +
+  labs(y = "Number of patients",
+       title = "Number of patients who enter ED") +
+  facet_wrap(vars(Hospital_Hierarchy), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none")
+```
+
+```{r}
+#Choose only two age groups in case of too many categories
+unique(data$Age_Code)
+
+#There are 17 different age groups, if also grouping with sex,
+#then there will be 17*3 groups
+
+data1_gts <- data1 %>%
+  filter(Age_Code == c("0 to 4", "85")) %>%
+  aggregate_key(Age_Code* Sex_ItemName_ENG , Number = sum(Number))
+
+data1_gts |>
+  filter(!is_aggregated(Sex_ItemName_ENG), !is_aggregated(Age_Code)) |>
+  autoplot(Number) +
+  labs(y = "Number of patients")
+```
+
+
+
+```{r}
+# Number of patients entering ED within different organisation 
+
+data2_hts <- data1 %>%
+  aggregate_key(Organisation/Hospital_Hierarchy, Number = sum(Number))
+
+data2_hts |>
+  filter(!is_aggregated(Hospital_Hierarchy)) |>
+  autoplot(Number) +
+  labs(y = "Number of patients",
+       title = "Number of patients who enter ED") +
+  facet_wrap(vars(Organisation), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none")
+
+```
+
+
+
+```{r}
+# Number of patients entering ED, facet by sex
+
+data3_ghts <- data1 %>%
+  aggregate_key((Organisation/Hospital_Hierarchy)* Sex_ItemName_ENG , Number = sum(Number))
+
+data3_ghts |>
+  filter(!is_aggregated(Hospital_Hierarchy), !is_aggregated(Hospital_Hierarchy)) |>
+  autoplot(Number) +
+  labs(y = "Number of patients",
+       title = "Number of patients who enter ED") +
+  facet_wrap(vars(Sex_ItemName_ENG), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none")
+```
+
