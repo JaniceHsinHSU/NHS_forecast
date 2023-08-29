@@ -146,6 +146,74 @@ fc <- fit |> forecast(h = 6)
 ```
 # is it the limitation from the package that it cannot do the reconciliation of temporal hiearchies?
 
+```{r}
+library(forecast)
+
+
+# Convert data1_full to a time series object
+ts_data <- ts(data1_full$Number, frequency = 12)  # Adjust frequency as needed
+
+# Define forecast horizon
+horizon <- 6 
+
+# Fit an appropriate forecasting model
+fit <- ets(ts_data)  
+
+# Generate forecasts
+forecast_result <- forecast(fit, h = horizon)
+
+# Print the forecast results
+print(forecast_result)
+
+# Plot the forecast
+plot(forecast_result)
+
+```
+
+```{r}
+
+# Define forecast horizon
+horizon <- 6  
+
+# ---- Exponential Smoothing (ETS) Models ----
+
+# Simple Exponential Smoothing (SES)
+ses_fit <- ses(ts_data)
+ses_forecast <- forecast(ses_fit, h = horizon)
+
+# Holt's Linear Exponential Smoothing (Holt's Linear)
+holt_fit <- holt(ts_data)
+holt_forecast <- forecast(holt_fit, h = horizon)
+
+# Holt-Winters Exponential Smoothing (Holt-Winters)
+hw_fit <- hw(ts_data)
+hw_forecast <- forecast(hw_fit, h = horizon)
+
+# ---- ARIMA Models ----
+
+# AutoRegressive Integrated Moving Average (ARIMA)
+arima_fit <- auto.arima(ts_data)
+arima_forecast <- forecast(arima_fit, h = horizon)
+
+# Seasonal ARIMA (SARIMA)
+sarima_fit <- auto.arima(ts_data, seasonal = TRUE)
+sarima_forecast <- forecast(sarima_fit, h = horizon)
+
+
+
+# ---- Plot Forecasts ----
+
+# Plot ETS forecasts
+plot(ses_forecast, main = "SES Forecast")
+plot(holt_forecast, main = "Holt's Linear Forecast")
+plot(hw_forecast, main = "Holt-Winters Forecast")
+
+# Plot ARIMA forecasts
+plot(arima_forecast, main = "ARIMA Forecast")
+plot(sarima_forecast, main = "SARIMA Forecast")
+
+```
+# I am a bit confused on the forecast result. What are x-axis and y axis supposed to be?
 
 
 
