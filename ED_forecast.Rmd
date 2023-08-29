@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(fpp3)
 library(hts)
+library(lubridate)
 ```
 
 
@@ -26,11 +27,12 @@ unique(data$Hospital_Hierarchy)
 
 ```{r}
 data1 <- data %>%
+  mutate(YearMonth = ym(YearMonth)) |> 
   mutate(YearMonth = yearmonth(YearMonth)) %>%
   as_tsibble(index = YearMonth, key = c(Age_Code, Sex_ItemName_ENG, Hospital_Code, Hospital_ItemName_ENG)) 
 
 data1 <- data1 %>%
-  mutate(Number = 1)
+  mutate(Number = 1)# what is this number?
 ```
 
 
