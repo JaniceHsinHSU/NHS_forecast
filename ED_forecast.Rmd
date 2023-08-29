@@ -35,7 +35,7 @@ data1 <- data1 %>%
 
 
 ```{r}
-#Produce a table or plot to show the hierarchy between the organisation and hospital hierararchy
+#Produce a table or plot to show the hierarchy between the organisation and hospital hierarchy
 
 # Assuming data is your hierarchical time series data
 data2 <- data1 %>%
@@ -68,7 +68,8 @@ data1_hts |>
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
   facet_wrap(vars(Hospital_Hierarchy), scales = "free_y", ncol = 3) +
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
 
 ```{r}
@@ -85,7 +86,8 @@ data1_gts <- data1 %>%
 data1_gts |>
   filter(!is_aggregated(Sex_ItemName_ENG), !is_aggregated(Age_Code)) |>
   autoplot(Number) +
-  labs(y = "Number of patients")
+  labs(y = "Number of patients")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
 
 
@@ -102,7 +104,8 @@ data2_hts |>
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
   facet_wrap(vars(Organisation), scales = "free_y", ncol = 3) +
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 
 ```
 
@@ -120,6 +123,29 @@ data3_ghts |>
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
   facet_wrap(vars(Sex_ItemName_ENG), scales = "free_y", ncol = 3) +
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
+
+```{r}
+#forecast
+data1_full <- data1 |>
+  aggregate_key((Organisation/Hospital_ItemName_ENG) * Age_Code, Number = sum(Number))
+
+fit <- data1_full |>
+  model(base = ETS(Number)) |>
+  reconcile(
+    bu = bottom_up(base),
+    ols = min_trace(base, method = "ols"),
+    mint = min_trace(base, method = "mint_shrink")
+  )
+```
+
+```{r}
+fc <- fit |> forecast(h = 6)
+```
+# is it the limitation from the package that it cannot do the reconciliation of temporal hiearchies?
+
+
+
 
