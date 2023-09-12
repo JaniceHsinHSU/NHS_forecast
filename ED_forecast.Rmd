@@ -104,7 +104,6 @@ data2_hts <- data1_grouped %>%
 
 ```{r}
 data2_hts |>
-  filter(!is_aggregated(Hospital_Hierarchy)) |>
   ggplot(aes(x = YearMonth, y = Number)) +
   geom_line(stat = "identity") +
   labs(y = "Number of patients",
@@ -117,17 +116,16 @@ data2_hts |>
 
 
 ```{r}
-library(gt)
+#library(gt)
 
-data2_hts %>%
-  select(YearMonth, Number, Grouped_Organisation) %>%
-  gt() %>%
-  tab_header(title = "Number of patients who enter ED") %>%
-  cols_label(
-    YearMonth = "Year/Month",
-    Number = "Number of Patients",
-    Grouped_Organisation = "Organisation Group"
-  )
+#data2_hts %>%
+  #gt() %>%
+  #tab_header(title = "Number of patients who enter ED") %>%
+  #cols_label(
+    #YearMonth = "Year/Month",
+    #Number = "Number of Patients",
+    #Grouped_Organisation = "Organisation Group"
+  #)
 
 ```
 
@@ -173,11 +171,11 @@ data1_gts |>
 ```{r}
 # Number of patients entering ED, facet by sex
 
-data3_ghts <- data1 %>%
-  aggregate_key((Organisation/Hospital_Hierarchy)* Sex_ItemName_ENG , Number = sum(Number))
+data3_ghts <- data1_grouped_age %>%
+  aggregate_key((Grouped_Organisation/Hospital_Hierarchy)* Sex_ItemName_ENG , Number = sum(Number))
 
 data3_ghts |>
-  filter(!is_aggregated(Hospital_Hierarchy), !is_aggregated(Hospital_Hierarchy)) |>
+  filter(!is_aggregated(Hospital_Hierarchy)) |>
   autoplot(Number) +
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
@@ -186,169 +184,112 @@ data3_ghts |>
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
 
-
+----------------------------
 
 ```{r}
-#forecast
 data1_full <- data1_grouped_age |>
-  aggregate_key((Grouped_Organisation/Hospital_ItemName_ENG) * Grouped_Age, Number = sum(Number))
+  aggregate_key(Grouped_Organisation/Hospital_ItemName_ENG, Number = sum(Number))
 
-data1_full <- data1_full |> fill_gaps()
-data1_full <- data1_full %>%
-               tidyr::drop_na(Number)
+data1_full$key_combined <- paste(data1_full$Grouped_Organisation, data1_full$Hospital_ItemName_ENG, sep = "_")
 
-
-
-fit <- data1_full |>
-  filter(year(YearMonth) < 2023) %>%
-  model(base = ETS(Number)) |>
-  reconcile(
-    bu = bottom_up(base),
-    ols = min_trace(base, method = "ols")
-  )
 ```
 
 
 ```{r}
-fc <- fit |> forecast(h = 6)
-```
-
-```{r}
-colSums(is.na(fc))
-```
-
-```{r}
-fit_bu <- fit |> reconcile(bu = bottom_up(base))
-fit_ols <- fit |> reconcile(ols = min_trace(base, method = "ols"))
-```
+library(lubridate)
 
 
-```{r}
-fc |>
-  filter(!is_aggregated(Hospital_ItemName_ENG), !is_aggregated(Grouped_Age)) |> 
-  autoplot(data1_full) +
-  facet_wrap(vars(Grouped_Organisation), scales = "free_y")+
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+data1_wide <- data1_full %>%
+   pivot_wider(names_from = key_combined, values_from = Number)
+
+
 ```
 
 
 
 ```{r}
-latest_date <- max(data1_full$YearMonth)  # Get the latest date
-start_date <- latest_date - yearmonth(12)  # Subtract 12 months from the latest date
-
-fc %>%
-  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) %>%
-  autoplot(data1_full) +
-  facet_wrap(vars(Organisation), scales = "free_y") +
-  coord_cartesian(xlim = c(start_date, latest_date))
-
-```
-
-
-
-
-```{r}
-library(forecast)
-
-
-# Convert data1_full to a time series object
-ts_data <- ts(data1_full$Number, frequency = 12)  # Adjust frequency as needed
-
-# Define forecast horizon
-horizon <- 6 
-
-# Fit an appropriate forecasting model
-fit <- ets(ts_data)  
-
-# Generate forecasts
-forecast_result <- forecast(fit, h = horizon)
-
-# Print the forecast results
-print(forecast_result)
-
-# Plot the forecast
-plot(forecast_result)
-
-```
-
-```{r}
-
-# Define forecast horizon
-horizon <- 6  
-
-# ---- Exponential Smoothing (ETS) Models ----
-
-# Simple Exponential Smoothing (SES)
-ses_fit <- ses(ts_data)
-ses_forecast <- forecast(ses_fit, h = horizon)
-
-# Holt's Linear Exponential Smoothing (Holt's Linear)
-holt_fit <- holt(ts_data)
-holt_forecast <- forecast(holt_fit, h = horizon)
-
-# Holt-Winters Exponential Smoothing (Holt-Winters)
-hw_fit <- hw(ts_data)
-hw_forecast <- forecast(hw_fit, h = horizon)
-
-# ---- ARIMA Models ----
-
-# AutoRegressive Integrated Moving Average (ARIMA)
-arima_fit <- auto.arima(ts_data)
-arima_forecast <- forecast(arima_fit, h = horizon)
-
-# Seasonal ARIMA (SARIMA)
-sarima_fit <- auto.arima(ts_data, seasonal = TRUE)
-sarima_forecast <- forecast(sarima_fit, h = horizon)
-
-
-
-# ---- Plot Forecasts ----
-
-# Plot ETS forecasts
-plot(ses_forecast, main = "SES Forecast")
-plot(holt_forecast, main = "Holt's Linear Forecast")
-plot(hw_forecast, main = "Holt-Winters Forecast")
-
-# Plot ARIMA forecasts
-plot(arima_forecast, main = "ARIMA Forecast")
-plot(sarima_forecast, main = "SARIMA Forecast")
-
-```
-# I am a bit confused on the forecast result. What are x-axis and y axis supposed to be?
-
-
--------------------------
-
-```{r}
-library(tidyverse)
 library(hts)
-library(readr)
-library(furrr)
-library(fabletools)
-library(tscount)
-```
 
-
-```{r}
-# Test sets of size 100,
-origins <- 50 * seq(10) + 50
-for (i in seq(origins)) {
-  # Set up training set
-  train <- data1
-  train$bts <- subset(train$bts, end = nrow(data1$bts) - origins[i])
-  # Create reconciled sample paths for different models
-  reconcile_sample_paths(train, model_function = "ets")
-  reconcile_sample_paths(train, model_function = "tscount")
-  reconcile_sample_paths(train, model_function = "iglm")
-  reconcile_sample_paths(train, model_function = "naiveecdf")
+reconcile_data1_wide_paths <- function(data1_full) {
+  
+  # Convert to regular data frame to bypass tsibble constraints
+  data1_full <- as.data.frame(data1_full)
+  
+  # Convert YearMonth to date
+  data1_wide <- data1_full %>%
+    unite("key_column", Grouped_Organisation, Hospital_ItemName_ENG, sep = "_") %>%
+    pivot_wider(names_from = key_column, values_from = Number, values_fill = list(Number = 0))
+  
+  # Convert the data to a gts object
+  ts_data <- ts(data1_wide[,-1], frequency = 12, start = c(year(min(ymd(paste0(data1_wide$YearMonth, "-01")))), month(min(ymd(paste0(data1_wide$YearMonth, "-01"))))))
+  gts_obj <- hts(ts_data)
+  
+  return(gts_obj)
 }
 
-create_ensembles() # Include naive
-create_ensembles(models_to_use = c("ets","iglm","tscount")) #Don't include naive
-create_qcomb() # Include naive
-create_qcomb(models_to_use = c("ets","iglm","tscount")) #Don't include naive
+# Calling the function
+gts_obj = reconcile_data1_wide_paths(data1_full)
 
 ```
+
+
+
+```{r}
+# First, forecast each individual series with ets
+individual_forecasts <- lapply(1:ncol(gts_obj[[1]]), function(i) {
+  ets_forecast <- forecast(ets(gts_obj[[1]][,i]), h = 6)
+  return(ets_forecast$mean)
+})
+
+# Combine the forecasts into a matrix
+forecast_matrix <- do.call(cbind, individual_forecasts)
+
+# Now, reconcile the forecasts using hts
+gts_forecast_matrix <- ts(forecast_matrix, frequency = 12)
+gts_forecasts <- hts(gts_forecast_matrix)
+reconciled_forecasts <- forecast(gts_forecasts, method = "bu")
+
+# Print the reconciled forecasts
+print(reconciled_forecasts)
+
+```
+
+Forecasting Each Series with ets:
+
+```{r}
+individual_forecasts <- lapply(1:ncol(gts_obj[[1]]), function(i) {
+  ets_forecast <- forecast(ets(gts_obj[[1]][,i]), h = 6)
+  return(ets_forecast$mean)
+})
+
+```
+
+Combine the Forecasts into a Matrix
+
+```{r}
+forecast_matrix <- do.call(cbind, individual_forecasts)
+
+```
+
+Convert to HTS Structure:
+
+```{r}
+gts_forecast_matrix <- ts(forecast_matrix, frequency = 12)
+gts_forecasts <- hts(gts_forecast_matrix)
+
+```
+
+Reconcile the Forecasts:
+```{r}
+reconciled_forecasts <- forecast(gts_forecasts, method = "bu", h = 6)
+
+```
+
+
+
+```{r}
+print(reconciled_forecasts)
+```
+
+
 
