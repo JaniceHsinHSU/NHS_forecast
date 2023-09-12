@@ -291,5 +291,95 @@ reconciled_forecasts <- forecast(gts_forecasts, method = "bu", h = 6)
 print(reconciled_forecasts)
 ```
 
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Decide how many months you want to hold out for testing
+h <- 6
+
+# Split the data into training and test set
+data1_train <- data1_full %>%
+  filter(as.Date(YearMonth) < max(as.Date(YearMonth)) - months(h))
+
+data1_test <- data1_full %>%
+  filter(as.Date(YearMonth) >= max(as.Date(YearMonth)) - months(h))
+
+
+```
+
+
+```{r}
+str(reconciled_forecasts)
+```
+Accessing the base forecasts:
+```{r}
+base_forecasts <- reconciled_forecasts$bts
+
+```
+
+Accessing historical data:
+```{r}
+historical_data <- reconciled_forecasts$histy
+
+```
+
+```{r}
+subset_data <- data1_test[, -c(1, which(names(data1_test) == "Grouped_Organisation"))]
+
+```
+
+
+```{r}
+sapply(subset_data, class)
+sapply(subset_data, function(col) unique(class(col)))
+subset_df <- as.data.frame(subset_data)
+test_data_matrix <- matrix(subset_data$Number, nrow = nrow(subset_data))
+
+
+
+```
+
+
+```{r}
+forecast_values <- matrix(reconciled_forecasts$bts, nrow = nrow(test_data_matrix))
+
+# Ensure that the dimensions of the test data and forecast values match:
+if(dim(test_data_matrix)[1] == dim(forecast_values)[1] & dim(test_data_matrix)[2] == dim(forecast_values)[2]){
+    accuracy_results <- accuracy(forecast_values, test_data_matrix)
+    print(accuracy_results)
+} else {
+    cat("The dimensions of test data and forecast values do not match.")
+}
+
+```
+
+```{r}
+if (nrow(test_data_matrix) > nrow(forecast_values)) {
+    test_data_matrix <- test_data_matrix[1:nrow(forecast_values), ]
+}
+
+```
+
+
+
+```{r}
+
+
+# Convert this matrix into a time series object
+test_data_ts <- ts(test_data_matrix, frequency = 12)
+
+
+forecast_ts <- ts(forecast_values, start=start(test_data_ts), frequency=12)
+
+# Calculate the Accuracy:
+acc <- accuracy(forecast_ts, test_data_ts)
+
+print(acc)
+
+```
+
+
+
 
 
