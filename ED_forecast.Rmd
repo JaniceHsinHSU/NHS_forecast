@@ -5,6 +5,8 @@ date: "2023-08-28"
 output: pdf_document
 ---
 
+# Preparation
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -37,8 +39,6 @@ data1 <- data1 %>%
 
 
 ```{r}
-#Produce a table or plot to show the hierarchy between the organisation and hospital hierarchy
-
 data2 <- data1 %>%
   select(YearMonth, Hospital_ItemName_ENG, Hospital_Hierarchy, Organisation, Number)
 ```
@@ -56,9 +56,8 @@ knitr::kable(hierarchical_table)
 
 ```
 
-
-```{r}
 #Number of patients entering ED under different hospital hierarchy
+```{r}
 
 data1_hts <- data1 %>%
   aggregate_key(Organisation/Hospital_ItemName_ENG, Number = sum(Number))
@@ -78,6 +77,7 @@ data1_hts |>
 •	A the Princess of Wales Hospital changed its Local Health Boards
 •	So we analyse these 4 as one organisation
 
+# Group the changed Local Health Board together
 
 ```{r}
 
@@ -90,6 +90,7 @@ data1_grouped <- data1 %>%
 ```
 
 
+# There are 6 Local Health Boards
 ```{r}
 unique(data1_grouped$Grouped_Organisation)
 ```
@@ -101,7 +102,7 @@ data2_hts <- data1_grouped %>%
   summarise(Number = sum(Number))
 ```
 
-
+# Number of patients who enter ED under 6 different local health boards
 ```{r}
 data2_hts |>
   ggplot(aes(x = YearMonth, y = Number)) +
@@ -129,12 +130,15 @@ data2_hts |>
 
 ```
 
+
+# Change the Age_Code structure into different groups
+
 ```{r}
 unique(data1_grouped$Age_Code)
 ```
 
 
-Age group: "0-4", "5-17", "18-69", "70^"
+# Age group: "0-4", "5-17", "18-69", "70^"
 ```{r}
 data1_grouped_age <- data1_grouped %>%
   filter(Age_Code != "Unknown") %>%
@@ -165,7 +169,28 @@ data1_gts |>
 ```
 
 
+```{r}
+library(dplyr)
 
+data1_gts <- data1_grouped_age %>%
+  filter(Sex_ItemName_ENG != "Not Specified or invalid") %>%
+  group_by(Grouped_Age, Sex_ItemName_ENG) %>%
+  summarize(Number = sum(Number, na.rm = TRUE))
+
+```
+
+```{r}
+library(ggplot2)
+
+p <- ggplot(data1_gts, aes(x = Grouped_Age, y = Number)) +
+  geom_bar(stat = "identity") +
+  labs(y = "Number of patients") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~ Sex_ItemName_ENG, scales = "free")
+
+print(p)
+
+```
 
 
 ```{r}
@@ -184,28 +209,31 @@ data3_ghts |>
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 ```
 
-----------------------------
+# Forecast
 
 ```{r}
 data1_full <- data1_grouped_age |>
-  aggregate_key(Grouped_Organisation/Hospital_ItemName_ENG, Number = sum(Number))
+  aggregate_key(Grouped_Organisation/Hospital_ItemName_ENG, Number = sum(Number))%>%
+  filter(!is_aggregated(Hospital_ItemName_ENG))
 
 data1_full$key_combined <- paste(data1_full$Grouped_Organisation, data1_full$Hospital_ItemName_ENG, sep = "_")
 
 ```
 
 
+
 ```{r}
 library(lubridate)
 
-
 data1_wide <- data1_full %>%
+ # select(-Grouped_Organisation, -Hospital_ItemName_ENG) %>%
    pivot_wider(names_from = key_combined, values_from = Number)
-
+#select does not work here, I reckon it is because of the aggregate function
 
 ```
 
 
+## use the reconcile function (however the gts turns out to be unexpected)
 
 ```{r}
 library(hts)
@@ -214,6 +242,10 @@ reconcile_data1_wide_paths <- function(data1_full) {
   
   # Convert to regular data frame to bypass tsibble constraints
   data1_full <- as.data.frame(data1_full)
+  
+  # Filter data to only include records up to 2028
+  data1_full <- data1_full %>%
+    filter(year(ymd(paste0(YearMonth, "-01"))) <= 2028)
   
   # Convert YearMonth to date
   data1_wide <- data1_full %>%
@@ -231,8 +263,7 @@ reconcile_data1_wide_paths <- function(data1_full) {
 gts_obj = reconcile_data1_wide_paths(data1_full)
 
 ```
-
-
+## Forecast with ets
 
 ```{r}
 # First, forecast each individual series with ets
@@ -244,17 +275,18 @@ individual_forecasts <- lapply(1:ncol(gts_obj[[1]]), function(i) {
 # Combine the forecasts into a matrix
 forecast_matrix <- do.call(cbind, individual_forecasts)
 
-# Now, reconcile the forecasts using hts
+# Reconcile the forecasts using hts
 gts_forecast_matrix <- ts(forecast_matrix, frequency = 12)
 gts_forecasts <- hts(gts_forecast_matrix)
 reconciled_forecasts <- forecast(gts_forecasts, method = "bu")
 
-# Print the reconciled forecasts
+
 print(reconciled_forecasts)
 
 ```
+## Another try 1
 
-Forecasting Each Series with ets:
+### Forecasting Each Series with ets:
 
 ```{r}
 individual_forecasts <- lapply(1:ncol(gts_obj[[1]]), function(i) {
@@ -264,14 +296,14 @@ individual_forecasts <- lapply(1:ncol(gts_obj[[1]]), function(i) {
 
 ```
 
-Combine the Forecasts into a Matrix
+### Combine the Forecasts into a Matrix
 
 ```{r}
 forecast_matrix <- do.call(cbind, individual_forecasts)
 
 ```
 
-Convert to HTS Structure:
+### Convert to HTS Structure:
 
 ```{r}
 gts_forecast_matrix <- ts(forecast_matrix, frequency = 12)
@@ -279,7 +311,7 @@ gts_forecasts <- hts(gts_forecast_matrix)
 
 ```
 
-Reconcile the Forecasts:
+### Reconcile the Forecasts:
 ```{r}
 reconciled_forecasts <- forecast(gts_forecasts, method = "bu", h = 6)
 
@@ -290,6 +322,7 @@ reconciled_forecasts <- forecast(gts_forecasts, method = "bu", h = 6)
 ```{r}
 print(reconciled_forecasts)
 ```
+## Compute accuracy
 
 ```{r}
 library(dplyr)
@@ -309,27 +342,25 @@ data1_test <- data1_full %>%
 ```
 
 
+Accessing the base forecasts:(just to check)
 ```{r}
-str(reconciled_forecasts)
-```
-Accessing the base forecasts:
-```{r}
-base_forecasts <- reconciled_forecasts$bts
+# base_forecasts <- reconciled_forecasts$bts
 
 ```
 
-Accessing historical data:
+Accessing historical data: (just to check)
 ```{r}
-historical_data <- reconciled_forecasts$histy
+# historical_data <- reconciled_forecasts$histy
 
 ```
 
+Subset the data:
 ```{r}
 subset_data <- data1_test[, -c(1, which(names(data1_test) == "Grouped_Organisation"))]
 
 ```
 
-
+Turn the data into matrix:
 ```{r}
 sapply(subset_data, class)
 sapply(subset_data, function(col) unique(class(col)))
@@ -362,6 +393,7 @@ if (nrow(test_data_matrix) > nrow(forecast_values)) {
 ```
 
 
+## Compute the accuracy metrics
 
 ```{r}
 
@@ -382,4 +414,185 @@ print(acc)
 
 
 
+-----
+
+
+
+## Another try for forecasting 2
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(hts)
+library(lubridate)
+
+# 1. Extracting and converting time information
+time_info <- data1_full$YearMonth
+date_converted <- as.Date(ymd(paste0(time_info, "-01")))
+
+# 2. Convert data to wide format without YearMonth column
+data1_wide <- data1_full %>%
+  select(-YearMonth) %>%
+  pivot_wider(names_from = key_combined, values_from = Number)
+
+# 3. Convert to a matrix and ensure all values are numeric
+data1_wide_numeric <- data1_wide[, sapply(data1_wide, is.numeric)]
+data_matrix <- as.matrix(data1_wide_numeric)
+
+
+
+# 4. Generate hierarchical time series
+hierarchical_ts <- hts(data_matrix)
+
+# 5. Forecast using the "bu" method
+forecast_results <- forecast(hierarchical_ts, h = 6, method = "bu")
+
+# 6. Generate the new forecast dates
+new_dates <- seq.Date(max(date_converted), by = "1 month", length.out = 7)[-1]
+
+# 7. Extracting the forecasted values
+forecasted_values <- tail(forecast_results[[2]], 6)
+
+# 8. Structure the forecasted data
+forecast_df <- data.frame(
+  YearMonth = rep(new_dates, times = ncol(forecasted_values)),
+  key_combined = rep(colnames(forecasted_values), each = 6),
+  Number = as.vector(t(forecasted_values))
+)
+
+# 9. Modify the separation process to handle unexpected underscores
+forecast_df <- forecast_df %>%
+  separate(key_combined, 
+           into = c("Grouped_Organisation", "Hospital_ItemName_ENG"), 
+           sep = "_(?=[^_]+$)")
+
+# 10. Combine the historical and forecasted data
+historical_df <- data1_full %>%
+  select(YearMonth, Grouped_Organisation, Hospital_ItemName_ENG, Number)
+
+combined_data <- dplyr::bind_rows(historical_df, forecast_df)
+
+```
+
+------
+
+## Use non-hierarchical forecasting
+
+```{r}
+summed_data <- data1_full %>%
+  group_by(Grouped_Organisation) %>%
+  summarise(Total_Number = sum(Number))
+```
+
+
+```{r}
+# Convert summed_data explicitly to a data.frame
+summed_data <- data.frame(summed_data)
+
+results <- list()
+
+# Extract unique organisations directly from summed_data
+unique_organisations <- unique(summed_data$Grouped_Organisation)
+
+for(org in unique_organisations) {
+  
+  # Explicitly match the rows
+  single_org_data <- summed_data[which(summed_data$Grouped_Organisation %in% org), ]
+  
+  cat("\nProcessing:", org, "\n")
+  cat("Number of rows:", nrow(single_org_data), "\n")
+  
+  # Only continue if there's data available
+  if(nrow(single_org_data) > 0) {
+    # Convert to time series
+    ts_data <- ts(single_org_data$Total_Number, frequency = 12) # monthly data
+    
+    # Forecast
+    forecasted <- forecast(auto.arima(ts_data), h=6)
+    
+    # Store the forecast in the results
+    results[[org]] <- forecasted
+  } else {
+    warning(paste("No data available for", org))
+  }
+}
+
+# Display the results
+results
+
+```
+
+-------
+
+
+
+```{r}
+summed_data$Date <- as.Date(summed_data$YearMonth)
+
+```
+
+
+```{r}
+forecast_results_list <- summed_data %>%
+  group_by(Grouped_Organisation) %>%
+  do({
+    # Convert to ts object
+    time_series_data <- ts(.$Total_Number, frequency = 12, start = c(year(min(.$Date)), month(min(.$Date))))
+    
+    # Fit ETS model
+    fit <- tryCatch(ets(time_series_data), error = function(e) NULL)
+    
+    # Forecast 6 months ahead if fit is successful
+    if (!is.null(fit)) {
+      forecast_obj <- forecast(fit, h = 6)
+      data.frame(
+        Grouped_Organisation = rep(unique(.$Grouped_Organisation), times = 6),
+        Forecast_Date = seq.Date(from = max(.$Date) + months(1), by = "month", length.out = 6),
+        Forecasted_Value = forecast_obj$mean,
+        Lower_80 = forecast_obj$lower[,1],
+        Upper_80 = forecast_obj$upper[,1],
+        Lower_95 = forecast_obj$lower[,2],
+        Upper_95 = forecast_obj$upper[,2]
+      )
+    } else {
+      data.frame()  # Empty data frame for organizations that couldn't be forecasted
+    }
+  })
+
+# Convert to a more familiar data frame structure
+forecast_df <- bind_rows(forecast_results_list)
+
+```
+
+use of rep(unique(.$Grouped_Organisation), times = 6) to ensure that the Grouped_Organisation column has the same number of rows as the forecasted values.
+
+
+```{r}
+forecast_df$Grouped_Organisation <- as.character(forecast_df$Grouped_Organisation)
+forecast_df$Grouped_Organisation <- factor(forecast_df$Grouped_Organisation)
+
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(forecast_df, aes(x = Forecast_Date, y = Forecasted_Value, group = Grouped_Organisation, color = Grouped_Organisation)) +
+  geom_line(size = 1) +
+  
+  # Highlighting the 80% confidence interval
+  geom_ribbon(aes(ymin = Lower_80, ymax = Upper_80), alpha = 0.2, fill = "grey") +
+  
+  # Highlighting the 95% confidence interval
+  geom_ribbon(aes(ymin = Lower_95, ymax = Upper_95), alpha = 0.1, fill = "grey") +
+  labs(title = "6-Month Ahead Forecasts",
+       y = "Forecasted Value",
+       x = "Date",
+       color = "Organisation") +
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  facet_wrap(~Grouped_Organisation, scales = "free", ncol = 3)+
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
 
