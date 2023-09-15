@@ -10,11 +10,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+# Required Libraries
+library(zoo)
+library(ggplot2)
+library(lubridate)
+library(tsibble)
 library(tidyverse)
 library(fpp3)
 library(hts)
 library(dplyr)
 library(tidyr)
+library(forecast)
 ```
 
 
@@ -143,9 +149,7 @@ data2_wide <- data1_grouped %>%
 ```
 
 
-```{r}
 
-```
 
 -------------
 # Forecast under Total (hierarchy 1) and Local Health Board (Hierarchy 2)
@@ -181,12 +185,9 @@ str(forecasts_hts)
 * method, fmethod: These are metadata about the forecasting process, indicating the method used for forecasting and combination.
 * nodes: Information about the nodes at different levels in the hierarchy.
 
+
+
 ```{r}
-# Required Libraries
-library(zoo)
-library(ggplot2)
-library(lubridate)
-library(tsibble)
 
 # Dates for Historical Data
 start_date <- yearmonth("2012 Apr")
@@ -197,9 +198,10 @@ hist_dates <- seq(as.Date(start_date), as.Date(end_date), by = "1 month") %>% ye
 historical_data <- zoo(forecasts_hts$histy, order.by = hist_dates)
 
 # Adjusting the forecast start date
-forecast_start_date <- end_date + 1
+forecast_start_date <- as.Date(end_date) %>% 
+  add_with_rollback(months(1)) %>% 
+  yearmonth()
 
-# The rest of the code remains the same
 forecast_dates <- seq(as.Date(forecast_start_date), by = "1 month", length.out = 10) %>% yearmonth()
 
 # Extract forecast data from the hts object
@@ -219,15 +221,13 @@ ggplot(df, aes(x = Date, y = Number, color = Health_Board)) +
        x = "YearMonth",
        y = "Number",
        color = "Health Board") +
-  theme_minimal()
+  scale_x_yearmonth(name = "YearMonth", 
+                    labels = function(x) format(x, "%b %Y"), 
+                    breaks = yearmonth(seq(as.Date(start_date), by = "1 year", length.out = 12))) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
-
-
-```{r}
-print(combined_data)
-```
-
 
 
 
