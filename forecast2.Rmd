@@ -21,6 +21,7 @@ library(hts)
 library(dplyr)
 library(tidyr)
 library(forecast)
+library(Metrics)
 ```
 
 
@@ -191,5 +192,86 @@ for (col in cols_to_forecast) {
 }
 
 ```
+
+
+# Accuracy
+
+```{r}
+
+h_forecast <- 12 
+h_validate <- 6
+
+# Splitting data
+training_data <- head(data2_wide, nrow(data2_wide) - h_validate)
+test_data <- tail(data2_wide, h_validate)
+
+
+```
+
+
+
+# Forecast
+
+```{r}
+# Define the forecast horizon and validation period
+h <- 12
+validation_period <- 6
+
+# Splitting the data
+training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
+test_data <- tail(data2_wide, validation_period)
+
+# Forecasting
+forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  forecast_model <- auto.arima(ts_data)
+  forecast_list[[col]] <- forecast(forecast_model, h = h)
+}
+
+# Plotting
+for (col in cols_to_forecast) {
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+  plot_forecast <- autoplot(forecast_list[[col]]) +
+    autolayer(actual_ts, series="Actual", PI=FALSE) +
+    labs(title = paste("Forecast vs Actual for", col)) +
+    theme(legend.position = "bottom")
+  
+  print(plot_forecast)
+}
+
+# Error Metrics
+error_metrics <- list()
+
+for (col in cols_to_forecast) {
+  actual <- test_data[[col]]
+  forecasted <- head(forecast_list[[col]]$mean, validation_period)  # Taking just the first 6 months of forecast
+  
+  MAE <- mae(actual, forecasted)
+  RMSE <- rmse(actual, forecasted)
+  MAPE <- tryCatch(mape(actual, forecasted), error = function(e) NA)  # Handle potential errors due to division by zero
+  
+  error_metrics[[col]] <- list(MAE = MAE, RMSE = RMSE, MAPE = MAPE)
+}
+
+print(error_metrics)
+
+```
+
+
+
+
+
+
 
 
