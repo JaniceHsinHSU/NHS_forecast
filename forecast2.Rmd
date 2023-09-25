@@ -2,12 +2,18 @@
 title: "Hierarchical_2"
 author: "Janice Hsu"
 date: "2023-09-15"
-output: pdf_document
+output: 
+  bookdown::pdf_document2: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.pos = "H", out.extra = "")
 ```
+
+\newpage
+
+# Preliminary Analysis
 
 ```{r}
 # Required Libraries
@@ -30,6 +36,37 @@ data <- read.csv("HLTH0037_ts_cleaned.csv")
 ```
 
 
+## Data Introduction
+
+The dataset contains 10 variables related to the hospitals and information of patients in Wales, UK. Here are the brief summary of the dataset:
+
+- Data: This column represents the number of attendance in each emergency department.
+
+- YearMonth: This column represents dates in the year-month format. Additionally, this dataset contains data from 2012 April to 2023 May.
+
+- Age_Code: This column provides the age group that the patient is in. There are 17 different age groups. They are "0 to 4","5 to 17","18 to 24","25 to 29","30 to 34","35 to 39","40 to 44","45 to 49","50 to 54","55 to 59","60 to 64","65 to 69","70 to 74","75 to 79","80 to 84","85" and "Unknown".
+
+- Sex_ItemName_ENG: This column provides the information of patient's gender. 
+
+- Hospital_Code: This column represents 42 different hospitals in Wales.
+
+- Hospital_ItemName_ENG: This columns refers to the name of the 42 different hospitals in Wales.
+
+- Hospital_Hierarchy: This column represents the code for the health board that the hospital belongs to.
+
+- Hospital_AltCode1: This column provides an alternate code for the hospital.
+
+- Organisation: This column represents the health board.
+
+- Organisation_Code: A code for the organisation as well as the health board.
+
+- There are three hierarchies in this dataset. On the top level, there is all the hospitals in Wales, while on the second hierarchy, there are 6 different health boards which also shown as the organisations. At the bottom level, there are 42 hospitals in total.
+
+
+
+\newpage
+# Exploratory Data Analysis
+
 ```{r}
 data <- data %>%
   mutate(YearMonth = yearmonth(YearMonth)) %>%
@@ -37,7 +74,7 @@ data <- data %>%
 
 ```
 
-#Number of patients entering ED under different hospital hierarchy
+## Number of patients entering ED under different hospital hierarchy
 ```{r}
 
 data_hts <- data %>%
@@ -54,11 +91,15 @@ data_hts |>
         axis.text.y = element_text(angle = 0, hjust = 1)) 
 ```
 
-•	A couple of Local Health Boards (LHBs) were redefined from the 1st of April 2019 onwards: Cwm Taf (27)--> Cwm Taf Morgannwg (30)// Abertawe Bro Morgannwg (26) --> Swansea Bay (31). Therefore, if you decide to forecast at LHB resolution, you might want to consider these 4 as a unique one. 
-•	A the Princess of Wales Hospital changed its Local Health Boards
-•	So we analyse these 4 as one organisation
+-	A couple of Local Health Boards (LHBs) were redefined from the 1st of April 2019 onwards: Cwm Taf (27)--> Cwm Taf Morgannwg (30)// Abertawe Bro Morgannwg (26) --> Swansea Bay (31). Therefore, if you decide to forecast at LHB resolution, you might want to consider these 4 as a unique one. 
 
-# Group the changed Local Health Board together
+-	A the Princess of Wales Hospital changed its Local Health Boards
+
+-	So we analyse these 4 as one organisation
+
+\newpage
+
+## Group the changed Local Health Board together
 
 ```{r}
 
@@ -70,7 +111,7 @@ data_grouped <- data %>%
 
 ```
 
-# There are 6 Local Health Boards
+### There are 6 Local Health Boards
 ```{r}
 unique(data_grouped$Aggregated_Organisation)
 ```
@@ -81,7 +122,7 @@ data2_hts <- data_grouped %>%
   summarise(Number = sum(Data))
 ```
 
-# Number of patients who enter ED under 6 different local health boards
+## Number of patients who enter ED under 6 different local health boards
 ```{r}
 data2_hts |>
   ggplot(aes(x = YearMonth, y = Number)) +
@@ -95,14 +136,30 @@ data2_hts |>
 ```
 
 
-# Change the Age_Code structure into different groups
+Findings: 
+- There is a big decline during the Covid-19 period, and after the Covid-19, except the Powys Teaching, other local health boards have increased the number of attendance back to its previous years.
+
+- There seems to be seasonality in the data for each health board, and I would like to investigate more on top of this.
+
+## Seasonality of number of attendances
+
+```{r}
+
+```
+
+
+
+
+\newpage
+
+## Change the Age_Code structure into different groups
 
 ```{r}
 unique(data_grouped$Age_Code)
 ```
 
 
-# Age group: "0-4", "5-17", "18-69", "70^"
+### Age group: "0-4", "5-17", "18-69", "70^"
 ```{r}
 data_grouped_age <- data_grouped %>%
   filter(Age_Code != "Unknown") %>%
@@ -119,7 +176,7 @@ data_grouped_age <- data_grouped %>%
 ```
 
 
-# Plot Number of Patients in different age groups
+## Plot Number of Patients in different age groups
 ```{r}
 data_gts <- data_grouped_age %>%
   filter(Sex_ItemName_ENG != "Not Specified or invalid") %>%
@@ -136,10 +193,10 @@ ggplot(data_gts, aes(x = Grouped_Age, y = Number)) +
 ```
 
 
-#Change the data into wide format
+
 
 ```{r}
-
+#Change the data into wide format
 data2_wide <- data_grouped %>%
   group_by(Aggregated_Organisation) %>%
   index_by(YearMonth) %>%
@@ -156,7 +213,7 @@ data2_wide <- data2_wide %>%
 
 ```
 
-
+# Forecast
 
 
 
@@ -187,14 +244,14 @@ print(forecast_list)
 ```
 
 ```{r}
-for (col in cols_to_forecast) {
-  print(autoplot(forecast_list[[col]]) + ggtitle(paste("Forecast for", col)))
-}
+#for (col in cols_to_forecast) {
+#  print(autoplot(forecast_list[[col]]) + ggtitle(paste("Forecast for", col)))
+#}
 
 ```
 
 
-# Accuracy
+
 
 ```{r}
 
@@ -212,16 +269,25 @@ test_data <- tail(data2_wide, h_validate)
 
 # Forecast
 
+### Define the forecast horizon and validation period
+
 ```{r}
-# Define the forecast horizon and validation period
 h <- 12
 validation_period <- 6
 
-# Splitting the data
+```
+
+
+### Splitting the data into training and testing sets
+```{r}
+
 training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
 test_data <- tail(data2_wide, validation_period)
 
-# Forecasting
+```
+
+
+```{r}
 forecast_list <- list()
 start_year <- year(min(training_data$YearMonth))
 start_month <- month(min(training_data$YearMonth))
@@ -231,8 +297,12 @@ for (col in cols_to_forecast) {
   forecast_model <- auto.arima(ts_data)
   forecast_list[[col]] <- forecast(forecast_model, h = h)
 }
+```
 
-# Plotting
+## Plotting
+
+```{r}
+
 for (col in cols_to_forecast) {
   end_year_train <- year(max(training_data$YearMonth))
   end_month_train <- month(max(training_data$YearMonth))
@@ -249,8 +319,11 @@ for (col in cols_to_forecast) {
   
   print(plot_forecast)
 }
+```
 
-# Error Metrics
+# Accuracy
+```{r}
+
 error_metrics <- list()
 
 for (col in cols_to_forecast) {
