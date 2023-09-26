@@ -28,6 +28,10 @@ library(dplyr)
 library(tidyr)
 library(forecast)
 library(Metrics)
+library(purrr)
+library(tidyr)
+library(stats)
+
 ```
 
 
@@ -137,17 +141,78 @@ data2_hts |>
 
 
 Findings: 
+
 - There is a big decline during the Covid-19 period, and after the Covid-19, except the Powys Teaching, other local health boards have increased the number of attendance back to its previous years.
 
 - There seems to be seasonality in the data for each health board, and I would like to investigate more on top of this.
 
+\newpage
+
 ## Seasonality of number of attendances
 
+To investigate deeper into the potential seasonality in the data, I would like to decompose the time series according the each health board. It allows us to discover the trend, seasonality and the residual components.
+
+
+
+### Decompose Time Series
+
 ```{r}
+
+# Decompose time series for each health board using STL
+stl_decompositions <- data2_hts %>%
+  split(.$Aggregated_Organisation) %>%
+  purrr::map(function(data){
+    ts_data <- ts(data$Number, frequency = 12)
+    stl(ts_data, s.window = "periodic")
+  })
+
+# Convert the decompositions to a tidy data frame
+stl_df <- purrr::map2_dfr(stl_decompositions, names(stl_decompositions), 
+                          ~{
+                            time_series <- as.data.frame(.x$time.series)
+                            time_series$Aggregated_Organisation <- .y
+                            return(time_series)
+                          })
 
 ```
 
 
+```{r}
+num_months <- length(unique(data2_hts$YearMonth))
+num_orgs <- length(unique(data2_hts$Aggregated_Organisation))
+
+# Correct assignment for YearMonth column
+stl_df$YearMonth <- rep(unique(data2_hts$YearMonth), times = num_orgs)
+
+```
+
+### Plotting
+
+```{r}
+stl_df_tidy <- stl_df %>%
+  tidyr::pivot_longer(cols = c(trend, seasonal, remainder), 
+                      names_to = "component", 
+                      values_to = "value")
+
+```
+
+
+```{r}
+stl_df_tidy %>%
+  ggplot(aes(x = YearMonth, y = value, color = component)) +
+  geom_line() +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", ncol = 3) +
+  labs(title = "STL Decomposition of ED Attendance",
+       y = "Number of Patients",
+       color = "Component") +
+  scale_color_manual(values = c("blue", "green", "red"),
+                     breaks = c("trend", "seasonal", "remainder"),
+                     labels = c("Trend", "Seasonal", "Residual")) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+Based on the STL decomposition, it is evident that each health board follows a similar trend. Moreover, it is obvious that there is a significant downturn during the Covid-19 era. As for seasonality, there is a pronounced surge in the number of patient's attendance in the middle of the year (approximately in June or July). This seasoanl pattern underlines the recurrent nature of patient admissions.
 
 
 \newpage
@@ -193,6 +258,9 @@ ggplot(data_gts, aes(x = Grouped_Age, y = Number)) +
 ```
 
 
+Findings:
+
+- The observation that the age group 18-69 has the most amount of patient attendance is expected, as it is the biggest group among all. However, it is noteworthy that the second biggest group are from the oldest age bracket, aligning with the general understanding of the health care need for the elders.
 
 
 ```{r}
@@ -214,7 +282,6 @@ data2_wide <- data2_wide %>%
 ```
 
 # Forecast
-
 
 
 ```{r}
@@ -243,14 +310,6 @@ print(forecast_list)
 
 ```
 
-```{r}
-#for (col in cols_to_forecast) {
-#  print(autoplot(forecast_list[[col]]) + ggtitle(paste("Forecast for", col)))
-#}
-
-```
-
-
 
 
 ```{r}
@@ -267,7 +326,7 @@ test_data <- tail(data2_wide, h_validate)
 
 
 
-# Forecast
+# Forecast with ARIMA
 
 ### Define the forecast horizon and validation period
 
@@ -288,18 +347,18 @@ test_data <- tail(data2_wide, validation_period)
 
 
 ```{r}
-forecast_list <- list()
+arima_forecast_list <- list()
 start_year <- year(min(training_data$YearMonth))
 start_month <- month(min(training_data$YearMonth))
 
 for (col in cols_to_forecast) {
   ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
-  forecast_model <- auto.arima(ts_data)
-  forecast_list[[col]] <- forecast(forecast_model, h = h)
+  arima_model <- auto.arima(ts_data)
+  forecast_list[[col]] <- forecast(arima_model, h = h)
 }
 ```
 
-## Plotting
+## Plotting using ARIMA
 
 ```{r}
 
@@ -321,30 +380,85 @@ for (col in cols_to_forecast) {
 }
 ```
 
-# Accuracy
+
+
+
+# Forecasting with ETS
+
 ```{r}
 
-error_metrics <- list()
+ets_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  ets_model <- ets(ts_data)  # Use the ets function
+  forecast_list[[col]] <- forecast(ets_model, h = h)
+}
+
+
+```
+
+## Plotting with ets
+```{r}
+for (col in cols_to_forecast) {
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+  plot_forecast <- autoplot(forecast_list[[col]]) +
+    autolayer(actual_ts, series="Actual", PI=FALSE) +
+    labs(title = paste("ETS Forecast vs Actual for", col)) +
+    theme(legend.position = "bottom")
+  
+  print(plot_forecast)
+}
+
+```
+
+# Accuracy assessment for ARIMA and ETS
+
+```{r}
+arima_error_metrics <- list()
+ets_error_metrics <- list()
 
 for (col in cols_to_forecast) {
   actual <- test_data[[col]]
-  forecasted <- head(forecast_list[[col]]$mean, validation_period)  # Taking just the first 6 months of forecast
+  arima_forecasted <- head(forecast_list[[col]]$mean, validation_period)
+  ets_forecasted <- head(ets_forecast_list[[col]]$mean, validation_period)
   
-  MAE <- mae(actual, forecasted)
-  RMSE <- rmse(actual, forecasted)
-  MAPE <- tryCatch(mape(actual, forecasted), error = function(e) NA)  # Handle potential errors due to division by zero
+  # ARIMA metrics
+  arima_MAE <- mae(actual, arima_forecasted)
+  arima_RMSE <- rmse(actual, arima_forecasted)
+  arima_MAPE <- tryCatch(mape(actual, arima_forecasted), error = function(e) NA)
+  arima_error_metrics[[col]] <- list(MAE = arima_MAE, RMSE = arima_RMSE, MAPE = arima_MAPE)
   
-  error_metrics[[col]] <- list(MAE = MAE, RMSE = RMSE, MAPE = MAPE)
+  # ETS metrics
+  ets_MAE <- mae(actual, ets_forecasted)
+  ets_RMSE <- rmse(actual, ets_forecasted)
+  ets_MAPE <- tryCatch(mape(actual, ets_forecasted), error = function(e) NA)
+  ets_error_metrics[[col]] <- list(MAE = ets_MAE, RMSE = ets_RMSE, MAPE = ets_MAPE)
 }
-
-print(error_metrics)
 
 ```
 
 
+```{r}
+for (col in cols_to_forecast) {
+  cat("\nAccuracy metrics for:", col, "\n")
+  cat("--------------------------\n")
+  cat("ARIMA:\n")
+  print(arima_error_metrics[[col]])
+  cat("ETS:\n")
+  print(ets_error_metrics[[col]])
+  cat("\n")
+}
 
-
-
-
+```
 
 
