@@ -307,9 +307,7 @@ for (col in cols_to_forecast) {
 
 ```{r}
 print(forecast_list)
-
 ```
-
 
 
 ```{r}
@@ -381,7 +379,9 @@ for (col in cols_to_forecast) {
 ```
 
 
+Due to the impact of Covid-19, the trend of forecast in the future appears to be lower than expected. However, the ARIMA model seems to suggest the consistent direction as the actual data for Cardiff & Vale, Grouped_4_Organisation, Hywel Dda, Powys Teaching and Total (All-Wales). Noticeably, they all have a downturn in the latter half of 2023. 
 
+However, the forecast for Aneurin Bevan and Betsi Cadwaladr are not that accurate according to the divergence between the predicted value and the actual data.
 
 # Forecasting with ETS
 
@@ -421,16 +421,57 @@ for (col in cols_to_forecast) {
 
 ```
 
+The prediction from the ETS model aligns closely with the actual data upon the visual inspection. Therefore, It might suggest that a higher accuracy for the ETS model compared to the ARIMA model.
+
+Additionally, all the predictions have a downturn of trend in the latter half of 2023. According to the historial data, this might be due to that the peak appears in the middle of the year followed by a trough at the end and the start of the year.
+
 # Accuracy assessment for ARIMA and ETS
 
 ```{r}
+library(forecast)
+library(lubridate)
+
+# Define the forecast horizon and validation period
+h <- 12
+validation_period <- 6
+
+# Splitting the data into training and testing sets
+training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
+test_data <- tail(data2_wide, validation_period)
+
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+# Lists to store forecasts and error metrics
+arima_forecast_list <- list()
+ets_forecast_list <- list()
 arima_error_metrics <- list()
 ets_error_metrics <- list()
 
+# Forecasting using ARIMA and ETS
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  
+  # ARIMA model
+  arima_model <- auto.arima(ts_data)
+  arima_forecast <- forecast(arima_model, h = h)
+  arima_forecast_list[[col]] <- arima_forecast
+  
+  # ETS model
+  tryCatch({
+    ets_model <- ets(ts_data)
+    ets_forecast <- forecast(ets_model, h = h)
+    ets_forecast_list[[col]] <- ets_forecast
+  }, error = function(e) {
+    cat("Error in forecasting for column:", col, "with message:", e$message, "\n")
+  })
+}
+
+# Calculating Accuracy Metrics for ARIMA and ETS
 for (col in cols_to_forecast) {
   actual <- test_data[[col]]
-  arima_forecasted <- head(forecast_list[[col]]$mean, validation_period)
-  ets_forecasted <- head(ets_forecast_list[[col]]$mean, validation_period)
+  
+  arima_forecasted <- head(arima_forecast_list[[col]]$mean, validation_period)
   
   # ARIMA metrics
   arima_MAE <- mae(actual, arima_forecasted)
@@ -438,17 +479,19 @@ for (col in cols_to_forecast) {
   arima_MAPE <- tryCatch(mape(actual, arima_forecasted), error = function(e) NA)
   arima_error_metrics[[col]] <- list(MAE = arima_MAE, RMSE = arima_RMSE, MAPE = arima_MAPE)
   
-  # ETS metrics
-  ets_MAE <- mae(actual, ets_forecasted)
-  ets_RMSE <- rmse(actual, ets_forecasted)
-  ets_MAPE <- tryCatch(mape(actual, ets_forecasted), error = function(e) NA)
-  ets_error_metrics[[col]] <- list(MAE = ets_MAE, RMSE = ets_RMSE, MAPE = ets_MAPE)
+  # Check if ETS forecast exists for the column to avoid errors
+  if (!is.null(ets_forecast_list[[col]])) {
+    ets_forecasted <- head(ets_forecast_list[[col]]$mean, validation_period)
+    
+    # ETS metrics
+    ets_MAE <- mae(actual, ets_forecasted)
+    ets_RMSE <- rmse(actual, ets_forecasted)
+    ets_MAPE <- tryCatch(mape(actual, ets_forecasted), error = function(e) NA)
+    ets_error_metrics[[col]] <- list(MAE = ets_MAE, RMSE = ets_RMSE, MAPE = ets_MAPE)
+  }
 }
 
-```
-
-
-```{r}
+# Displaying Accuracy Metrics for each Column
 for (col in cols_to_forecast) {
   cat("\nAccuracy metrics for:", col, "\n")
   cat("--------------------------\n")
@@ -460,5 +503,12 @@ for (col in cols_to_forecast) {
 }
 
 ```
+
+
+
+
+
+
+
 
 
