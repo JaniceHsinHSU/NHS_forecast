@@ -358,7 +358,7 @@ for (col in cols_to_forecast) {
 
 ## Plotting using ARIMA
 
-```{r}
+```{r  fig.height=4}
 
 for (col in cols_to_forecast) {
   end_year_train <- year(max(training_data$YearMonth))
@@ -401,7 +401,7 @@ for (col in cols_to_forecast) {
 ```
 
 ## Plotting with ets
-```{r}
+```{r  fig.height=4}
 for (col in cols_to_forecast) {
   end_year_train <- year(max(training_data$YearMonth))
   end_month_train <- month(max(training_data$YearMonth))
@@ -560,6 +560,107 @@ However, to get a comprehensive overview of the forecast accuracy, it is benefic
 Gumbrecht, J., Howard, J., & McPhillips, D. (2023, May 5). WHO says Covid-19 is no longer a global health emergency. CNN. https://edition.cnn.com/2023/05/05/health/who-ends-covid-health-emergency/index.html
 
 
+```{r  fig.height=4}
+
+# Define the forecast horizon and validation period
+h <- 12
+validation_period <- 6
+
+# Convert data into time series
+start_year <- year(min(data2_wide$YearMonth))
+start_month <- month(min(data2_wide$YearMonth))
+
+# Filter data post-January 2022
+data2_wide <- data2_wide[which(data2_wide$YearMonth > ymd("2022-01-31")), ]
+
+# Splitting the data into training and testing sets
+training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
+test_data <- tail(data2_wide, validation_period)
+
+# Columns to forecast
+cols_to_forecast <- c("Aneurin Bevan", "Betsi Cadwaladr", "Cardiff & Vale", "Grouped_4_organisation", "Hywel Dda", "Powys Teaching", "Total")
+
+# Forecast using ARIMA
+arima_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  arima_model <- auto.arima(ts_data)
+  arima_forecast_list[[col]] <- forecast(arima_model, h = h)
+}
+
+# Plotting using ARIMA
+for (col in cols_to_forecast) {
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+  plot_forecast <- autoplot(arima_forecast_list[[col]]) +
+    autolayer(actual_ts, series="Actual", PI=FALSE) +
+    labs(title = paste("Forecast vs Actual for", col)) +
+    theme(legend.position = "bottom")
+  
+  print(plot_forecast)
+}
+
+```
 
 
+```{r fig.height=4}
+# Define the forecast horizon and validation period
+h <- 12
+validation_period <- 6
+
+# Convert data into time series
+start_year <- year(min(data2_wide$YearMonth))
+start_month <- month(min(data2_wide$YearMonth))
+
+# Filter data post-January 2022
+data2_wide <- data2_wide[which(data2_wide$YearMonth > ymd("2022-01-31")), ]
+
+# Splitting the data into training and testing sets
+training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
+test_data <- tail(data2_wide, validation_period)
+
+# Columns to forecast
+cols_to_forecast <- c("Aneurin Bevan", "Betsi Cadwaladr", "Cardiff & Vale", "Grouped_4_organisation", "Hywel Dda", "Powys Teaching", "Total")
+
+# Forecast using ETS
+ets_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  ets_model <- ets(ts_data)
+  ets_forecast_list[[col]] <- forecast(ets_model, h = h)
+}
+
+# Plotting using ETS
+for (col in cols_to_forecast) {
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+  plot_forecast <- autoplot(ets_forecast_list[[col]]) +
+    autolayer(actual_ts, series="Actual", PI=FALSE) +
+    labs(title = paste("ETS Forecast vs Actual for", col)) +
+    theme(legend.position = "bottom")
+  
+  print(plot_forecast)
+}
+
+```
+
+- A flat line: No trend, no seasonality, not sure if it's because of the forecast horizon.
 
