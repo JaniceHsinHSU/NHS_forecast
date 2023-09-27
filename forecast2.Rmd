@@ -427,28 +427,34 @@ Additionally, all the predictions have a downturn of trend in the latter half of
 
 # Accuracy assessment for ARIMA and ETS
 
-```{r}
-library(forecast)
-library(lubridate)
 
-# Define the forecast horizon and validation period
+### Define the forecast horizon and validation period
+```{r}
 h <- 12
 validation_period <- 6
+```
 
-# Splitting the data into training and testing sets
+### Splitting the data into training and testing sets
+```{r}
 training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
 test_data <- tail(data2_wide, validation_period)
 
 start_year <- year(min(training_data$YearMonth))
 start_month <- month(min(training_data$YearMonth))
+```
 
-# Lists to store forecasts and error metrics
+### Lists to store forecasts and error metrics
+
+```{r}
 arima_forecast_list <- list()
 ets_forecast_list <- list()
 arima_error_metrics <- list()
 ets_error_metrics <- list()
+```
 
-# Forecasting using ARIMA and ETS
+## Forecasting using ARIMA and ETS
+```{r}
+
 for (col in cols_to_forecast) {
   ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
   
@@ -466,8 +472,11 @@ for (col in cols_to_forecast) {
     cat("Error in forecasting for column:", col, "with message:", e$message, "\n")
   })
 }
+```
 
-# Calculating Accuracy Metrics for ARIMA and ETS
+## Calculating Accuracy Metrics for ARIMA and ETS
+```{r}
+
 for (col in cols_to_forecast) {
   actual <- test_data[[col]]
   
@@ -491,7 +500,11 @@ for (col in cols_to_forecast) {
   }
 }
 
-# Displaying Accuracy Metrics for each Column
+```
+
+### Displaying Accuracy Metrics for each Column
+```{r}
+
 for (col in cols_to_forecast) {
   cat("\nAccuracy metrics for:", col, "\n")
   cat("--------------------------\n")
@@ -505,8 +518,46 @@ for (col in cols_to_forecast) {
 ```
 
 
+- Most of the error metrics for ETS model are lower than the ARIMA model, except for Cardiff & Vale. 
+
+- The ARIMA model is based on the autoregressive and moving average components of the time series, in line with the differencing method in order to make the data stationary. On the other hand, the ETS model focuses on the error, trend and seasonality components of the time series.
+
+- According to the interest based on the NHS team, they would like to understand what is the best error metric to assess the quality of the forecast for the non-zero count data. Therefore, I would like to provide some insights for the error metrics:
 
 
+1. **Root Mean Squared Error (RMSE)**
+   - **Description**: Measures the square root of the average squared differences between forecast and actual values.
+   - **Pros**: It gives more weight to large errors.
+   - **Cons**: It can be influenced significantly by outliers. RMSE might be inflated, if the count data is prone to significant spikes or declines, which should not be the problem for this data except for the Covid-19 era.
+   
+2. **Mean Absolute Percentage Error (MAPE)**
+   - **Description**: Measures the average of the absolute percentage errors.
+   - **Pros**: It is a relative metric, and is scale-independent and easy to interpret.
+   - **Cons**: MAPE can overemphasize relative errors on small counts.
+   
+3. **Mean Absolute Error (MAE)**
+   - **Description**: Measures the average of the absolute differences between forecast and actual values.
+   - **Pros**: It's less sensitive to outliers than RMSE. It provides a straightforward average error size.
+   - **Cons**: It does not emphasize large errors.
+
+
+
+**Recommendation**:
+
+- If you want to penalize larger errors more severely, **RMSE** might be the preferred choice if the larger errors need to be considered, such as the drops in the Covid-19 era.
+
+- For a more balanced view of the average error, **MAE** can be considered.
+
+- **MAPE** is useful and insightful if a relative metric is needed to as it gives error as a percentage of the actual counts.
+
+However, to get a comprehensive overview of the forecast accuracy, it is beneficial to examine on multiple error metrics. Additionally, the choice of the metrics also depend on the specific objectives.
+
+# Forecast after Covid-19
+- Use the data after **2022 Jan** (after the significant drop appears in the graph)
+
+- WHO says Covid-19 is no longer a global health emergency (2023 May)
+
+Gumbrecht, J., Howard, J., & McPhillips, D. (2023, May 5). WHO says Covid-19 is no longer a global health emergency. CNN. https://edition.cnn.com/2023/05/05/health/who-ends-covid-health-emergency/index.html
 
 
 
