@@ -31,6 +31,7 @@ library(Metrics)
 library(purrr)
 library(tidyr)
 library(stats)
+library(fable)
 
 ```
 
@@ -663,4 +664,118 @@ for (col in cols_to_forecast) {
 ```
 
 - A flat line: No trend, no seasonality, not sure if it's because of the forecast horizon.
+
+# Reconciliation
+
+
+```{r}
+data_hts <- data_grouped_age |>
+  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
+```
+
+
+```{r}
+data_hts |>
+  filter(is_aggregated(Hospital_ItemName_ENG)) |>
+  autoplot(attendance) +
+  labs(y = "attendance ('000)",
+       title = "ED attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1)) 
+```
+
+```{r}
+data_wales <- data_grouped_age |>
+  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
+```
+
+
+```{r}
+data_wales |>
+  model(ets = ETS(attendance)) |>
+  reconcile(bu = bottom_up(ets)) |>
+  forecast()
+```
+
+```{r}
+data_full <- data_grouped_age |>
+  aggregate_key((Aggregated_Organisation/Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
+
+library(dplyr)
+library(tsibble)
+library(fable)
+
+
+filter_date <- yearmonth("2022 Jan")
+
+fit <- data_full %>%
+  filter(yearmonth(YearMonth) <= filter_date) %>%
+  model(
+    base = ETS(attendance)
+  ) %>%
+  reconcile(
+    bu = bottom_up(base),
+    ols = min_trace(base, method = "ols"),
+    mint = min_trace(base, method = "mint_shrink")
+  )
+
+```
+
+
+
+```{r}
+library(purrr)
+
+# Define a filter date (e.g., "2022 Jun")
+filter_date <- yearmonth("2022 Jun")
+
+# Filter your data and fit an ETS model
+fit <- data_full %>%
+  filter(yearmonth(YearMonth) <= filter_date) %>%
+  model(
+    base = ETS(attendance)
+  )
+```
+
+```{r}
+# Check for missing or infinite values in each model
+models_have_issues <- any(map_lgl(fit, ~ any(is.infinite(pluck(.x, "attendance"))) || any(is.na(pluck(.x, "attendance")))))
+
+if (models_have_issues) {
+ 
+} else {
+  
+  fc <- fit %>% forecast(h = 18)
+  
+  # Check the forecast results or handle errors appropriately
+  if (!exists("fc")) {
+    cat("Forecasting failed. Please review your data and model.\n")
+  } else {
+    print(fc)
+  }
+}
+
+```
+
+
+```{r}
+
+# Filter the forecast results for aggregated levels and plot
+fc %>%
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) %>%
+  autoplot(
+    data_full %>% filter(yearmonth(YearMonth) >= yearmonth("2020 Jan")),
+    level = NULL
+  ) +
+  labs(y = "Attendance ('000)") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1))
+
+```
+
+
+
 
