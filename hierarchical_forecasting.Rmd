@@ -2,14 +2,20 @@
 title: "hierarchical_forecasting_report"
 author: "Janice Hsu"
 date: "2023-09-30"
-output: 
-  bookdown::pdf_document2: default
+output:
+  bookdown::pdf_document2:
+    latex_engine: xelatex
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.pos = "H", out.extra = "")
 ```
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
 
 \newpage
 
@@ -504,6 +510,7 @@ However, to get a comprehensive overview of the forecast accuracy, it is benefic
 
 # Reconciliation
 
+## Aggregate data
 
 ```{r}
 data_hts <- data_grouped_age |>
@@ -511,17 +518,6 @@ data_hts <- data_grouped_age |>
 ```
 
 
-```{r}
-data_hts |>
-  filter(is_aggregated(Hospital_ItemName_ENG)) |>
-  autoplot(attendance) +
-  labs(y = "attendance ('000)",
-       title = "ED attendance") +
-  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", ncol = 3) +
-  theme(legend.position = "none")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text.y = element_text(angle = 0, hjust = 1)) 
-```
 
 ```{r}
 data_wales <- data_grouped_age |>
@@ -529,6 +525,87 @@ data_wales <- data_grouped_age |>
 ```
 
 
+
+
+## Time series cross validation
+
+
+```{r}
+# Split data
+training_data <- data_wales %>% 
+  filter(YearMonth <= yearmonth("2022 Jun"))
+
+test_data <- data_wales %>% 
+  filter(YearMonth > yearmonth("2022 Jun"))
+
+# Fit the model
+fit <- training_data %>%
+  model(ets_model = ETS(attendance ~ trend("A")))
+
+# Generate forecasts
+fc <- fit %>%
+  forecast(h = "1 year")  # specify forecast horizon, modify accordingly
+
+# Validate: Check forecast and test_data lengths
+cat("Length of forecast: ", nrow(fc), "\n")
+cat("Length of test data: ", nrow(test_data), "\n")
+```
+```{r}
+# Replace `forecasted_column` with the appropriate column name
+forecasted_values <- fc$.mean
+
+# Ensure they are in the data.frame format and compare
+accuracy_value <- accuracy(as.data.frame(forecasted_values), as.data.frame(test_data$attendance))
+print(accuracy_value)
+
+
+```
+
+
+```{r}
+
+# Replace `forecasted_column` with the appropriate column name
+comparison_data <- data.frame(
+  Month = test_data$YearMonth,
+  Actual = test_data$attendance,
+  Forecasted = fc$.mean
+)
+
+ggplot(comparison_data, aes(x = Month)) +
+  geom_line(aes(y = Actual, colour = "Actual")) +
+  geom_line(aes(y = Forecasted, colour = "Forecasted"), linetype = "dashed") +
+  labs(title = "Forecasted vs Actual Values",
+       y = "Values",
+       colour = "Legend") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+t.test(comparison_data$Actual, comparison_data$Forecasted)
+
+```
+
+The p-value is quite high, suggesting that we do not reject the null hypothesis of equal means between the actual and forecasted values, and it suggests that the means of the actual and forecasted datasets are not significantly different from each other, at least not with statistical confidence.
+
+The confidence interval for the difference between the means spans from 
+−7022.433 to 9034.910, which includes 0, further indicating that the difference between the means of the two groups is not statistically significant.
+
+Mean of Actual Values and Mean of Forecasted Values shows that, in practical terms, the means of actual and forecasted values are fairly close to each other.
+
+
+```{r}
+mape <- mean(abs((comparison_data$Forecasted - comparison_data$Actual) / comparison_data$Actual)) * 100
+mse <- mean((comparison_data$Forecasted - comparison_data$Actual)^2)
+
+cat("Mean Absolute Percentage Error: ", mape, "%\n")
+cat("Mean Squared Error: ", mse, "\n")
+
+```
+
+## Reconcile
 ```{r}
 data_wales |>
   model(ets = ETS(attendance)) |>
@@ -565,10 +642,8 @@ fit <- data_full %>%
 ```{r}
 library(purrr)
 
-# Define a filter date (e.g., "2022 Jun")
 filter_date <- yearmonth("2022 Jun")
 
-# Filter your data and fit an ETS model
 fit <- data_full %>%
   filter(yearmonth(YearMonth) <= filter_date) %>%
   model(
