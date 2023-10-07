@@ -38,6 +38,9 @@ library(purrr)
 library(tidyr)
 library(stats)
 library(fable)
+library(dplyr)
+
+
 
 ```
 
@@ -531,6 +534,7 @@ data_wales <- data_grouped_age |>
 
 
 ```{r}
+library(tscount)
 # Split data
 training_data <- data_wales %>% 
   filter(YearMonth <= yearmonth("2022 Jun"))
@@ -538,24 +542,43 @@ training_data <- data_wales %>%
 test_data <- data_wales %>% 
   filter(YearMonth > yearmonth("2022 Jun"))
 
-# Fit the model
-fit <- training_data %>%
-  model(ets_model = ETS(attendance ~ trend("A")))
 
+```
+
+```{r}
+library(fable.tscount)
+fit<- training_data %>%
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
+
+```
+
+
+
+
+```{r}
 # Generate forecasts
 fc <- fit %>%
-  forecast(h = "1 year")  # specify forecast horizon, modify accordingly
+  forecast(h = 12) %>%
+  filter(.model == "comb")
 
 # Validate: Check forecast and test_data lengths
 cat("Length of forecast: ", nrow(fc), "\n")
 cat("Length of test data: ", nrow(test_data), "\n")
 ```
+
+
+
 ```{r}
-# Replace `forecasted_column` with the appropriate column name
+# Check the accuracy
 forecasted_values <- fc$.mean
 
-# Ensure they are in the data.frame format and compare
-accuracy_value <- accuracy(as.data.frame(forecasted_values), as.data.frame(test_data$attendance))
+accuracy_value <- accuracy(
+  as.data.frame(forecasted_values),as.data.frame(test_data$attendance))
+
 print(accuracy_value)
 
 
@@ -564,7 +587,6 @@ print(accuracy_value)
 
 ```{r}
 
-# Replace `forecasted_column` with the appropriate column name
 comparison_data <- data.frame(
   Month = test_data$YearMonth,
   Actual = test_data$attendance,
@@ -587,13 +609,12 @@ ggplot(comparison_data, aes(x = Month)) +
 t.test(comparison_data$Actual, comparison_data$Forecasted)
 
 ```
-
-The p-value is quite high, suggesting that we do not reject the null hypothesis of equal means between the actual and forecasted values, and it suggests that the means of the actual and forecasted datasets are not significantly different from each other, at least not with statistical confidence.
+The p-value is very high, suggesting that we do not reject the null hypothesis. It indicates the equal means between the actual and forecasted values, and they are not significantly different from each other.
 
 The confidence interval for the difference between the means spans from 
-−7022.433 to 9034.910, which includes 0, further indicating that the difference between the means of the two groups is not statistically significant.
+-6712.277 to 9238.730, which includes 0, further indicating that the difference between the means of the two groups is not statistically significant.
 
-Mean of Actual Values and Mean of Forecasted Values shows that, in practical terms, the means of actual and forecasted values are fairly close to each other.
+Additionally, Mean of Actual Values and Mean of Forecasted Values shows that, they are very close to each other. And that probably gives the reason why the result of the accuracy test is 0.
 
 
 ```{r}
@@ -605,71 +626,95 @@ cat("Mean Squared Error: ", mse, "\n")
 
 ```
 
+
+
+
+- Base forecasting: applied when forecasting simple time series.
+- Reconciliation forecasting (Hierarchical forecasting): it includes forecasting on different levels of aggregation, and it should be applied when dealing with hierarchical or grouped time series.
+
+
 ## Reconcile
+
+### 1. Fitting models and Forecasting
+
+
 ```{r}
-data_wales |>
+forecast_wales <- data_wales |>
   model(ets = ETS(attendance)) |>
-  reconcile(bu = bottom_up(ets)) |>
-  forecast()
+  reconcile(bu = bottom_up(ets),
+            wls_ETS1 = min_trace(ets, method = "wls_struct"),
+            wls_ETS2 = min_trace(ets, method = "wls_var"),
+            mint_ETS = min_trace(ets, method = "mint_shrink")) %>%
+  forecast(h = 6)
 ```
+
+
+```{r}
+forecast_wales_avg <- forecast_wales %>%
+  as_tibble() %>%
+  group_by(Aggregated_Organisation, YearMonth) %>%
+  summarise(mean_attendance = mean(.mean, na.rm = TRUE), .groups = "drop")
+
+```
+
+```{r}
+forecast_wales_avg$Aggregated_Organisation <- factor(forecast_wales_avg$Aggregated_Organisation)
+
+```
+
+```{r}
+ggplot(forecast_wales_avg, aes(x = YearMonth, y = mean_attendance)) +
+  geom_line() +
+  labs(title = "Average Attendance Forecast",
+       x = "Year and Month",
+       y = "Average Attendance") +
+  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1))
+  
+```
+
+## Include Age Group
+
+
 
 ```{r}
 data_full <- data_grouped_age |>
   aggregate_key((Aggregated_Organisation/Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
 
-library(dplyr)
-library(tsibble)
-library(fable)
+filter_date <- yearmonth("2022 Jun")
 
-
-filter_date <- yearmonth("2022 Jan")
-
-fit <- data_full %>%
+fc <- data_full %>%
   filter(yearmonth(YearMonth) <= filter_date) %>%
   model(
     base = ETS(attendance)
   ) %>%
   reconcile(
-    bu = bottom_up(base),
-    ols = min_trace(base, method = "ols"),
-    mint = min_trace(base, method = "mint_shrink")
-  )
+    bu = bottom_up(base))  %>%
+  forecast(h = 18)
 
 ```
 
 
 
+
+
+
 ```{r}
-library(purrr)
-
-filter_date <- yearmonth("2022 Jun")
-
 fit <- data_full %>%
   filter(yearmonth(YearMonth) <= filter_date) %>%
   model(
     base = ETS(attendance)
   )
-```
 
-```{r}
-# Check for missing or infinite values in each model
-models_have_issues <- any(map_lgl(fit, ~ any(is.infinite(pluck(.x, "attendance"))) || any(is.na(pluck(.x, "attendance")))))
+reconciled_fit <- fit %>%
+  reconcile(bu = bottom_up(base))
 
-if (models_have_issues) {
- 
-} else {
-  
-  fc <- fit %>% forecast(h = 18)
-  
-  # Check the forecast results or handle errors appropriately
-  if (!exists("fc")) {
-    cat("Forecasting failed. Please review your data and model.\n")
-  } else {
-    print(fc)
-  }
-}
+fc_direct <- reconciled_fit %>% forecast(h = 18)
 
 ```
+
 
 
 ```{r}
@@ -678,8 +723,7 @@ if (models_have_issues) {
 fc %>%
   filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) %>%
   autoplot(
-    data_full %>% filter(yearmonth(YearMonth) >= yearmonth("2020 Jan")),
-    level = NULL
+    data_full %>% filter(yearmonth(YearMonth) >= yearmonth("2020 Jan")),level = NULL
   ) +
   labs(y = "Attendance ('000)") +
   facet_wrap(vars(Aggregated_Organisation), scales = "free_y") +
@@ -688,6 +732,20 @@ fc %>%
 
 ```
 
+
+```{r}
+print(fc)
+```
+
+
+```{r}
+setdiff(as.character(unique(data_full$Grouped_Age)), as.character(unique(fc$.model)))
+```
+
+
+```{r}
+
+```
 
 
 
