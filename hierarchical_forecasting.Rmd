@@ -516,6 +516,7 @@ However, to get a comprehensive overview of the forecast accuracy, it is benefic
 ## Aggregate data
 
 ```{r}
+# hierarchy with age group
 data_hts <- data_grouped_age |>
   aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
 ```
@@ -523,6 +524,7 @@ data_hts <- data_grouped_age |>
 
 
 ```{r}
+# hierarchy without age group, only aggregate with the organisation, wales as a big picture
 data_wales <- data_grouped_age |>
   aggregate_key(Aggregated_Organisation, attendance = sum(Data))
 ```
@@ -540,20 +542,23 @@ training_data <- data_wales %>%
   filter(YearMonth <= yearmonth("2022 Jun"))
 
 test_data <- data_wales %>% 
-  filter(YearMonth > yearmonth("2022 Jun"))
+  filter(YearMonth > yearmonth("2022 Jun")) 
 
+test_data_filtered <- test_data %>%
+  filter(Aggregated_Organisation == "<aggregated>")
 
 ```
 
+
 ```{r}
+# average the three models
 library(fable.tscount)
-fit<- training_data %>%
+fit_cv<- training_data %>%
   model(
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
     tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
   )|> mutate (comb = (naive_model+ets_model+tscount)/3)
-
 ```
 
 
@@ -561,23 +566,28 @@ fit<- training_data %>%
 
 ```{r}
 # Generate forecasts
-fc <- fit %>%
+fc_cv <- fit_cv %>%
   forecast(h = 12) %>%
-  filter(.model == "comb")
+  filter(.model == "comb") 
 
-# Validate: Check forecast and test_data lengths
-cat("Length of forecast: ", nrow(fc), "\n")
-cat("Length of test data: ", nrow(test_data), "\n")
 ```
 
+
+```{r}
+# Generate forecasts for aggregated
+fc_cv_filtered <- fit_cv %>%
+  forecast(h = 12) %>%
+  filter(.model == "comb") %>%
+  filter(Aggregated_Organisation == "<aggregated>")
+```
 
 
 ```{r}
 # Check the accuracy
-forecasted_values <- fc$.mean
+forecasted_values <- fc_cv_filtered$.mean
 
 accuracy_value <- accuracy(
-  as.data.frame(forecasted_values),as.data.frame(test_data$attendance))
+  as.data.frame(forecasted_values),as.data.frame(test_data_filtered$attendance))
 
 print(accuracy_value)
 
@@ -585,46 +595,73 @@ print(accuracy_value)
 ```
 
 
-```{r}
+```{r result_not_expected}
 
 comparison_data <- data.frame(
-  Month = test_data$YearMonth,
+  Month = yearmonth(test_data$YearMonth),
   Actual = test_data$attendance,
-  Forecasted = fc$.mean
-)
+  Forecasted = fc_cv$.mean,
+  Aggregated_Organisation = test_data$Aggregated_Organisation  
+) 
 
-ggplot(comparison_data, aes(x = Month)) +
-  geom_line(aes(y = Actual, colour = "Actual")) +
-  geom_line(aes(y = Forecasted, colour = "Forecasted"), linetype = "dashed") +
-  labs(title = "Forecasted vs Actual Values",
-       y = "Values",
-       colour = "Legend") +
-  theme_minimal()
+```
+
+
+```{r}
+
+comparison_data_long<- comparison_data %>%
+  pivot_longer(
+    cols = c(Actual, Forecasted),
+    names_to = "Type",
+    values_to = "Value"
+  )
+
+
+
+unique_organisations <- unique(comparison_data_long$Aggregated_Organisation)
+
+plot_list <- map(unique_organisations, ~{
+  ggplot(comparison_data_long[comparison_data_long$Aggregated_Organisation == .x,], 
+         aes(x = Month, y = Value, color = Type)) +
+    geom_line() +
+    labs(title = paste("Forecasted vs Actual Values for", .x),
+         y = "Values") +
+    theme_minimal()
+})
+print(plot_list)
+
+
+```
+
+```{r}
+# Running t-tests and extracting p-value and t-value
+t_test_summary <- comparison_data %>%
+  group_by(Aggregated_Organisation) %>%
+  summarise(
+    t_value = list(t.test(Actual, Forecasted)$statistic),
+    p_value = list(t.test(Actual, Forecasted)$p.value)
+  ) %>%
+  unnest(cols = c(t_value, p_value))
+
+print(t_test_summary)
 
 ```
 
 
 
 ```{r}
-t.test(comparison_data$Actual, comparison_data$Forecasted)
+
+mape_results <- comparison_data %>%
+  group_by(Aggregated_Organisation) %>%
+  summarise(
+    MAPE = mean(abs((Forecasted - Actual) / Actual), na.rm = TRUE) * 100
+  )
+
+print(mape_results)
 
 ```
-The p-value is very high, suggesting that we do not reject the null hypothesis. It indicates the equal means between the actual and forecasted values, and they are not significantly different from each other.
-
-The confidence interval for the difference between the means spans from 
--6712.277 to 9238.730, which includes 0, further indicating that the difference between the means of the two groups is not statistically significant.
-
-Additionally, Mean of Actual Values and Mean of Forecasted Values shows that, they are very close to each other. And that probably gives the reason why the result of the accuracy test is 0.
 
 
-```{r}
-mape <- mean(abs((comparison_data$Forecasted - comparison_data$Actual) / comparison_data$Actual)) * 100
-mse <- mean((comparison_data$Forecasted - comparison_data$Actual)^2)
-
-cat("Mean Absolute Percentage Error: ", mape, "%\n")
-cat("Mean Squared Error: ", mse, "\n")
-
-```
 
 
 
@@ -673,6 +710,21 @@ ggplot(forecast_wales_avg, aes(x = YearMonth, y = mean_attendance)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text.y = element_text(angle = 0, hjust = 1))
   
+```
+
+
+
+
+
+```{r}
+forecast_wales1 <- data_wales |>
+  model(
+  tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3)))|>
+  reconcile(bu = bottom_up(tscount),
+            wls_ETS1 = min_trace(tscount, method = "wls_struct"),
+           wls_ETS2 = min_trace(tscount, method = "wls_var"),
+            mint_ETS = min_trace(tscount, method = "mint_shrink")) %>%
+  forecast(h = 6)
 ```
 
 ## Include Age Group
