@@ -715,7 +715,7 @@ comparison_data <- data.frame(
 ```
 
 
-```{r}
+```{r fig.height=4}
 
 joined_data_long<- joined_data %>%
   pivot_longer(
