@@ -82,6 +82,7 @@ The dataset contains 10 variables related to the hospitals and information of pa
 # Exploratory Data Analysis
 
 ```{r}
+# change data structure
 data <- data %>%
   mutate(YearMonth = yearmonth(YearMonth)) %>%
   as_tsibble(index = YearMonth, key = c(Age_Code, Sex_ItemName_ENG, Hospital_Code, Hospital_ItemName_ENG)) 
@@ -90,13 +91,15 @@ data <- data %>%
 
 ## Number of patients entering ED under different hospital hierarchy
 ```{r}
-
+# Aggregate the data
 data_hts <- data %>%
-  aggregate_key(Organisation/Hospital_ItemName_ENG, Number = sum(Data))
-  
+  aggregate_key(Organisation/Hospital_ItemName_ENG, attendance = sum(Data))
+
+# Plot the aggregated data
+
 data_hts |>
   filter(is_aggregated(Hospital_ItemName_ENG)) |>
-  autoplot(Number) +
+  autoplot(attendance) +
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
   facet_wrap(vars(Organisation), scales = "free_y", ncol = 3) +
@@ -116,6 +119,7 @@ data_hts |>
 ## Group the changed Local Health Board together
 
 ```{r}
+# mutate Aggregated_Organisation due to the change of the health boards
 
 data_grouped <- data %>%
   mutate(Aggregated_Organisation = case_when(
@@ -133,13 +137,16 @@ unique(data_grouped$Aggregated_Organisation)
 ```{r}
 data2_hts <- data_grouped %>%
   group_by(Aggregated_Organisation) %>%
-  summarise(Number = sum(Data))
+  summarise(attendance = sum(Data)) 
 ```
+
+
+
 
 ## Number of patients who enter ED under 6 different local health boards
 ```{r}
 data2_hts |>
-  ggplot(aes(x = YearMonth, y = Number)) +
+  ggplot(aes(x = YearMonth, y = attendance)) +
   geom_line(stat = "identity") +
   labs(y = "Number of patients",
        title = "Number of patients who enter ED") +
@@ -150,11 +157,31 @@ data2_hts |>
 ```
 
 
-Findings: 
+**Analysing Health Board Attendance Trends Amidst and Post-COVID-19:**
 
-- There is a big decline during the Covid-19 period, and after the Covid-19, except the Powys Teaching, other local health boards have increased the number of attendance back to its previous years.
+Healthcare systems around the world faced significant difficulties during the COVID-19 epidemic, which caused them to quickly shift into crisis-response mode. Intriguing trends during and after the epidemic era have been revealed by a thorough review of attendance data from local health boards.
 
-- There seems to be seasonality in the data for each health board, and I would like to investigate more on top of this.
+- During the pandemic:
+
+Surprisingly, several local health boards experienced a large reduction in attendance throughout the epidemic period. This significant drop in attendance, which may have been brought on by reasons including stringent public health regulations, widespread concern over virus exposure, and maybe changes in healthcare delivery strategies, was an anomalous departure from historical attendance trends.
+
+- Post pandemic:
+
+After the pandemic's intensity started to lessen, there was a noticeable increase in attendance, however there were notable differences amongst the local health boards. In contrast to most boards, which showed a strong recovery and raised their attendance figures to levels prior to the pandemic, Powys Teaching stood out as an outlier and defied this recovery trend. To fully understand the subtleties affecting these disparate courses and influence upcoming strategic planning, more research is necessary.
+
+- Findings on seasonality:
+
+Initial data analysis reveals the existence of seasonality, which is characterized by repeated swings in attendance across all health boards. This pattern calls for a perceptive investigation into:
+
+Identify Underlying Causes: 
+Researching seasonality's probable triggers, such as public health initiatives, flu seasons, or holiday seasons, in order to comprehend the factors influencing these patterns.
+
+Determine Seasonal influence: 
+Establishing whether the observed seasonality has an equal influence on all health boards or whether there are differences, which may be a sign of regional causes or policy changes.
+
+Planning and Forecasting: 
+By using this understood seasonality to improve forecasting models and ensuring that they are calibrated to account for these seasonal changes, more precise and useful predictive insights are made possible.
+
 
 \newpage
 
@@ -172,7 +199,7 @@ To investigate deeper into the potential seasonality in the data, I would like t
 stl_decompositions <- data2_hts %>%
   split(.$Aggregated_Organisation) %>%
   purrr::map(function(data){
-    ts_data <- ts(data$Number, frequency = 12)
+    ts_data <- ts(data$attendance, frequency = 12)
     stl(ts_data, s.window = "periodic")
   })
 
@@ -225,9 +252,11 @@ stl_df_tidy %>%
 Based on the STL decomposition, it is evident that each health board follows a similar trend. Moreover, it is obvious that there is a significant downturn during the Covid-19 era. As for seasonality, there is a pronounced surge in the number of patient's attendance in the middle of the year (approximately in June or July). This seasoanl pattern underlines the recurrent nature of patient admissions.
 
 
+
+
 \newpage
 
-## Change the Age_Code structure into different groups
+## Change the Age_Code structure into different groups for simplicity and interpretability
 
 ```{r}
 unique(data_grouped$Age_Code)
@@ -271,15 +300,13 @@ ggplot(data_gts, aes(x = Grouped_Age, y = Number)) +
 Findings:
 
 - The observation that the age group 18-69 has the most amount of patient attendance is expected, as it is the biggest group among all. However, it is noteworthy that the second biggest group are from the oldest age bracket, aligning with the general understanding of the health care need for the elders.
-
-
 ```{r}
 #Change the data into wide format
 data2_wide <- data_grouped %>%
   group_by(Aggregated_Organisation) %>%
   index_by(YearMonth) %>%
-  summarise(Number = sum(Data)) %>%
-  pivot_wider(names_from = Aggregated_Organisation, values_from = Number)
+  summarise(attendance = sum(Data)) %>%
+  pivot_wider(names_from = Aggregated_Organisation, values_from = attendance)
 
 
 ```
@@ -292,20 +319,23 @@ data2_wide <- data2_wide %>%
 ```
 
 
+
 # Forecast with ARIMA
 
-### Define the forecast horizon and validation period
+
 
 ```{r}
+
+# Define the forecast horizon and validation period
 h <- 12
 validation_period <- 6
 
 ```
 
 
-### Splitting the data into training and testing sets
-```{r}
 
+```{r}
+# Splitting the data into training and testing sets
 training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
 test_data <- tail(data2_wide, validation_period)
 
@@ -350,11 +380,6 @@ for (col in cols_to_forecast) {
 }
 ```
 
-
-Due to the impact of Covid-19, the trend of forecast in the future appears to be lower than expected. However, the ARIMA model seems to suggest the consistent direction as the actual data for Cardiff & Vale, Grouped_4_Organisation, Hywel Dda, Powys Teaching and Total (All-Wales). Noticeably, they all have a downturn in the latter half of 2023. 
-
-However, the forecast for Aneurin Bevan and Betsi Cadwaladr are not that accurate according to the divergence between the predicted value and the actual data.
-
 # Forecasting with ETS
 
 ```{r}
@@ -393,24 +418,88 @@ for (col in cols_to_forecast) {
 
 ```
 
-The prediction from the ETS model aligns closely with the actual data upon the visual inspection. Therefore, It might suggest that a higher accuracy for the ETS model compared to the ARIMA model.
 
-Additionally, all the predictions have a downturn of trend in the latter half of 2023. According to the historial data, this might be due to that the peak appears in the middle of the year followed by a trough at the end and the start of the year.
+
+Explanation for the ARIMA model:
+
+In time series forecasting, the ARIMA (AutoRegressive Integrated Moving Average) model is frequently employed. It belongs to a class of models that can reproduce a variety of common temporal structures in time series data.
+
+
+- Conformity:
+
+Hywel Dda, Powys Teaching, Cardiff & Vale, Grouped_4_Organisation, and Total (All-Wales): For these health boards, the ARIMA model effectively predicted the downturn that was observed in the latter portions of 2023 and successfully reflected the actual data, indicating a cogent direction. This demonstrates ARIMA's ability to effectively model and anticipate time-series data for these specific entities, despite the unpredictably fluctuating conditions brought on by the epidemic.
+
+- Contradictions:
+
+Aneurin Bevan and Betsi Cadwaladr: By contrast, the prediction statistics for Aneurin Bevan and Betsi Cadwaladr show a clear departure from the actual numbers. It is necessary to assess the ARIMA model's applicability and accuracy with regard to these specific datasets because there is a discrepancy between the predicted value and the real-time data.
+
+
+# Forecasting with ETS
+
+```{r}
+
+ets_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (Aggregated_Organisation in cols_to_forecast) {
+  ts_data <- ts(training_data[[Aggregated_Organisation]], start = c(start_year, start_month), frequency = 12)
+  ets_model <- ets(ts_data)  # Use the ets function
+  forecast_list[[Aggregated_Organisation]] <- forecast(ets_model, h = h)
+}
+
+
+```
+
+
+
+## Plotting with ets
+```{r  fig.height=4}
+for (col in cols_to_forecast) {
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+  plot_forecast <- autoplot(forecast_list[[col]]) +
+    autolayer(actual_ts, series="Actual", PI=FALSE) +
+    labs(title = paste("ETS Forecast vs Actual for", col)) +
+    theme(legend.position = "bottom")
+  
+  print(plot_forecast)
+}
+
+```
+
+
+Upon first glance, it appears that the ETS model offers a relatively close alignment with the real data, demonstrating a strong predictive power. When compared to the ARIMA model, the projections closely mimic the actual data patterns rather than merely following them, which suggests a possibility for greater accuracy.
+
+-Consistent Decline in Predictions:
+
+Downtrend in 2023: Regardless of the model used, all forecasts uniformly point to a decline in trends during the second half of 2023. This might be explained by the historical data's apparent cyclical nature. In other words, the historical data reveals a pattern in which peaks frequently appear in the middle of the year and then descend into troughs at year's end and the beginning of the next year. This apparent phenomena may have a significant impact on the expected downturn in 2023.
+
+In light of the above, it is crucial to approach model selection with a nuanced comprehension of the underlying data and impacting factors, even though the ETS model shows a potentially higher prediction accuracy within the given circumstances. 
+
+Therefore, I would like to conduct an accuracy analysis upon both arima and ets models.
+
 
 # Accuracy assessment for ARIMA and ETS
 
-### Lists to store forecasts and error metrics
 
 ```{r}
+# Lists to store forecasts and error metrics
 arima_forecast_list <- list()
 ets_forecast_list <- list()
 arima_error_metrics <- list()
 ets_error_metrics <- list()
 ```
 
-## Forecasting using ARIMA and ETS
-```{r}
 
+```{r}
+# Forecasting with ARIMA and ETS
 for (col in cols_to_forecast) {
   ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
   
@@ -458,6 +547,8 @@ for (col in cols_to_forecast) {
 
 ```
 
+
+
 ### Displaying Accuracy Metrics for each Column
 ```{r}
 for (col in cols_to_forecast) {
@@ -468,18 +559,23 @@ for (col in cols_to_forecast) {
   cat("ETS:\n")
   print(ets_error_metrics[[col]])
   cat("\n")
-  # Add a line break to separate the next set of metrics horizontally
   cat("----------------------------------------------------\n")
 }
 
 ```
 
 
-- Most of the error metrics for ETS model are lower than the ARIMA model, except for Cardiff & Vale. 
+- With Cardiff & Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
 
-- The ARIMA model is based on the autoregressive and moving average components of the time series, in line with the differencing method in order to make the data stationary. On the other hand, the ETS model focuses on the error, trend and seasonality components of the time series.
+- Model Differentiation: 
 
-- According to the interest based on the NHS team, they would like to understand what is the best error metric to assess the quality of the forecast for the non-zero count data. Therefore, I would like to provide some insights for the error metrics:
+ARIMA, A Time-Series Tradition Autoregressive, integrative (difference), and moving average features are included in the forecasting core components.
+The foundation is laid by differencing to make data stationary, and then autoregressive and moving average techniques are applied.
+
+ETS: A Comprehensive Method for Time-Series Model Constituent Elements reflects the seasonality, trend, and error components in time series data. Consists of rigorous detection and modeling of error, trend, and seasonal patterns within the data, which tends to include entire pattern analysis.
+
+
+- According to the interest expressed by the NHS executives, I would like to provide some insights for the error metrics according to the quality of the forecast for the non-zero count data:
 
 
 1. **Root Mean Squared Error (RMSE)**
@@ -497,17 +593,18 @@ for (col in cols_to_forecast) {
    - **Pros**: It's less sensitive to outliers than RMSE. It provides a straightforward average error size.
    - **Cons**: It does not emphasize large errors.
 
+**However, RMSE and MAE should not be used for the hierarchical time series data.**
+And here is why:
 
+- **1. Consistency Between Levels:**
+Granularity Errors are not consistently distributed or similar across all hierarchical levels due to the variance in data granularity between levels, and there will be an aggregation dilemma. Due to the variation in magnitude and volume at various hierarchical levels, direct aggregation of RMSE or MAE from bottom levels to top levels might produce inconsistent or biased judgments of forecast accuracy.
 
-**Recommendation**:
+- **2. Problems with reconciliation:**
+It is possible for forecasts to not add up coherently in a hierarchical structure when they are independently generated for several levels. Since they assess mistakes without taking into account hierarchical dependencies, RMSE and MAE do not by default address this reconciliation. And the alignment issue will therefore be caused. The use of standard error measurements at various hierarchical levels may produce false conclusions regarding the precision and dependability of the forecasts in the absence of a cogent reconciliation process.
 
-- If you want to penalize larger errors more severely, **RMSE** might be the preferred choice if the larger errors need to be considered, such as the drops in the Covid-19 era.
+- **3. Metric incomparability:**
+Impact of a unit error is not constant across levels; for instance, a 100-unit error may be insignificant at a higher aggregate level but significant at a lower one. Additionally, due to the divergent scales of the errors at various levels, it is difficult to use a single statistic, such as RMSE or MAE, to fairly compare performance across all hierarchical levels.
 
-- For a more balanced view of the average error, **MAE** can be considered.
-
-- **MAPE** is useful and insightful if a relative metric is needed to as it gives error as a percentage of the actual counts.
-
-However, to get a comprehensive overview of the forecast accuracy, it is beneficial to examine on multiple error metrics. Additionally, the choice of the metrics also depend on the specific objectives.
 
 
 
