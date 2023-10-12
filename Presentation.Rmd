@@ -492,14 +492,7 @@ class: center, middle
 
 - With Cardiff & Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
 
----
-class: center, middle
 
-- **Base forecasting:** applied when forecasting simple time series.
-
-- **Reconciliation forecasting (Hierarchical forecasting):** it includes forecasting on different levels of aggregation, and it should be applied when dealing with hierarchical or grouped time series.
-
-- **Notes:** RMSE and MAE should not be used for the hierarchical time series data (Problems with reconciliation, Metric incomparability)
 
 ---
 
