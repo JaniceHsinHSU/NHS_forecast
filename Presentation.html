@@ -17,7 +17,7 @@ class: center, middle, inverse, title-slide
 # Hierarchical Forecasting of Emergency Department Attendance
 ]
 .subtitle[
-## ⚔<br/> with NHS
+## <br/> with NHS
 ]
 .author[
 ### Janice Hsu
@@ -58,7 +58,7 @@ class: inverse, center, middle
 ---
 
 
-class: center
+
 ## There are 6 Local Health Boards
 
 - Aneurin Bevan
@@ -106,7 +106,7 @@ class: center
 
 
 ---
-class: center
+class: center, middle
 
 - **Similar trends:** Consistent patient attendance patterns are revealed by STL decomposition across all health boards.
   
@@ -189,7 +189,6 @@ class: center
 
 
 
-# ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-18-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 ---
 
@@ -214,23 +213,20 @@ class: center
 # ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-23-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
+
 ---
 # ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-24-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
 ---
-# ETS model
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-25-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
----
-
-class: center
+class: center, middle
 **Result:**
 
 - With Cardiff &amp; Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
 
 ---
-class: center
+class: center, middle
 
 - **Base forecasting:** applied when forecasting simple time series.
 
@@ -263,8 +259,137 @@ data_wales &lt;- data_grouped_age |&gt;
   aggregate_key(Aggregated_Organisation, attendance = sum(Data))
 ```
 
+---
+
+# Step 2: Time series cross validation
 
 
+
+
+
+```r
+# average the three models
+library(fable.tscount)
+fit_cv&lt;- training_data %&gt;%
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
+  )|&gt; mutate (comb = (naive_model+ets_model+tscount)/3)
+```
+
+
+
+
+
+
+
+
+```r
+# Generate forecasts for aggregated
+fc_cv_filtered &lt;- fit_cv %&gt;%
+  forecast(h = 12) %&gt;%
+  filter(.model == "comb") %&gt;%
+  filter(Aggregated_Organisation == "&lt;aggregated&gt;")
+```
+
+---
+
+# Check the accuracy
+
+
+```r
+forecasted_values &lt;- fc_cv_filtered$.mean
+
+accuracy_value &lt;- accuracy(
+  as.data.frame(forecasted_values),as.data.frame(test_data_filtered$attendance))
+
+print(accuracy_value)
+```
+
+```
+## [1] 0
+```
+
+---
+
+
+
+
+
+
+
+
+
+
+---
+# Step 3: Forecast
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-36-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-37-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-38-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-39-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-40-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-41-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-42-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Running t-tests and extracting p-value and t-value
+
+```r
+t_test_summary &lt;- joined_data %&gt;%
+  summarise(
+    t_value = list(t.test(attendance, forecast)$statistic),
+    p_value = list(t.test(attendance, forecast)$p.value)
+  ) %&gt;%
+  unnest(cols = c(t_value, p_value))
+
+print(t_test_summary)
+```
+
+```
+## # A tibble: 1 × 2
+##   t_value p_value
+##     &lt;dbl&gt;   &lt;dbl&gt;
+## 1   0.313   0.755
+```
+
+The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significant different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
+
+---
+
+# Reconcile
+
+
+
+  
+
+
+
+
+
+
+
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-48-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
 # Thanks!
 
 Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
