@@ -39,7 +39,8 @@ library(tidyr)
 library(stats)
 library(fable)
 library(dplyr)
-
+library(igraph)
+library(ggraph)
 
 
 ```
@@ -420,9 +421,6 @@ for (col in cols_to_forecast) {
 
 
 
-Explanation for the ARIMA model:
-
-In time series forecasting, the ARIMA (AutoRegressive Integrated Moving Average) model is frequently employed. It belongs to a class of models that can reproduce a variety of common temporal structures in time series data.
 
 
 - Conformity:
@@ -857,4 +855,41 @@ fc %>%
 ```
 
 
+
+
+
+```{r}
+
+# Nodes data
+nodes_df <- data.frame(
+  name = c("All Wales", 
+           "Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+           "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching", 
+           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+           "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+# Edges data
+edges_df <- data.frame(
+  from = c(rep("All Wales", 6), 
+           rep("Betsi Cadwaladr", 5)),
+  to = c("Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+         "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching",
+         "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+         "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+# Creating graph object
+graph <- graph_from_data_frame(d = edges_df, vertices = nodes_df, directed = TRUE)
+
+# Creating the plot using ggraph
+ggraph(graph, layout = "tree") + 
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), angle = 45, hjust = 1, vjust = 1.5) +
+  theme_void()
+
+```
 
