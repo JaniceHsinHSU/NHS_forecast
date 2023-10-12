@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Hierarchical Forecasting of Emergency Department Attendance</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Janice Hsu" />
+    <meta name="date" content="2023-10-12" />
+    <script src="libs/header-attrs-2.25/header-attrs.js"></script>
+    <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
+    <link href="libs/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+.title[
+# Hierarchical Forecasting of Emergency Department Attendance
+]
+.subtitle[
+## ⚔<br/> with NHS
+]
+.author[
+### Janice Hsu
+]
+.institute[
+### Monash University
+]
+.date[
+### 2023-10-12
+]
+
+---
+
+class: inverse, center, middle
+
+# Base Forecasting vs. Hierarchical Forecasting
+
+### Different types of time series data
+
+---
+
+# Hierchical Structure
+
+
+
+
+
+
+
+
+
+&lt;img src="Presentation_files/figure-html/small-plot-1.png" width="60%" height="60%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Number of patients entering ED under different hospital hierarchy
+&lt;img src="Presentation_files/figure-html/attendance1-1.png" width="60%" height="60%" style="display: block; margin: auto;" /&gt;
+---
+
+
+class: center
+## There are 6 Local Health Boards
+
+- Aneurin Bevan
+- Betsi Cadwaladr
+- Hywel Dda
+- Grouped_4_organisation
+- Cardiff &amp; Vale
+- Powys Teaching
+---
+
+
+
+# Number of patients who enter ED under 6 different local health boards
+&lt;img src="Presentation_files/figure-html/attendance2-1.png" width="60%" height="60%" style="display: block; margin: auto;" /&gt;
+---
+# Findings:
+- COVID-19 caused significant changes in patient attendance.
+
+- Due to health regulations and concerns about virus infection, attendance at many local health boards decreased during the pandemic.
+
+- The post-pandemic period showed a rise in attendance, with various boards showing distinct recovery path.
+
+- Powys Teaching noticeably departed from the general upward recovery trend.
+
+- Data show that attendance patterns appear to be seasonal across all health boards.
+
+- Future efforts should concentrate on determining this seasonality's sources, effects, and incorporation into predictive forecasting models.
+
+---
+
+# Seasonality of number of attendances
+
+
+
+
+
+
+### Plotting
+
+
+
+
+&lt;img src="Presentation_files/figure-html/stl_decom-1.png" width="60%" height="60%" style="display: block; margin: auto;" /&gt;
+
+
+
+---
+class: center
+
+- **Similar trends:** Consistent patient attendance patterns are revealed by STL decomposition across all health boards.
+  
+- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilization or access.
+  
+- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, according to seasonal variations.
+  
+---
+
+
+
+
+
+
+
+# Forecast with ARIMA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-8-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+---
+
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-9-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-10-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-11-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-12-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-13-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-14-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-15-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
+---
+# Forecasting with ETS
+
+
+
+
+
+
+
+
+
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-18-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+---
+
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-19-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-20-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-21-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-22-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-23-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-24-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-25-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+class: center
+**Result:**
+
+- With Cardiff &amp; Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
+
+---
+class: center
+
+- **Base forecasting:** applied when forecasting simple time series.
+
+- **Reconciliation forecasting (Hierarchical forecasting):** it includes forecasting on different levels of aggregation, and it should be applied when dealing with hierarchical or grouped time series.
+
+- **Notes:** RMSE and MAE should not be used for the hierarchical time series data (Problems with reconciliation, Metric incomparability)
+
+---
+
+# Reconciliation
+
+## Step 1: Aggregate the data
+
+
+
+
+
+
+```r
+# hierarchy with age group
+data_hts &lt;- data_grouped_age |&gt;
+  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
+```
+
+
+
+```r
+# hierarchy without age group, only aggregate with the organisation, wales as a big picture
+data_wales &lt;- data_grouped_age |&gt;
+  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
+```
+
+
+
+# Thanks!
+
+Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
+
+The chakra comes from [remark.js](https://remarkjs.com), [**knitr**](https://yihui.org/knitr/), and [R Markdown](https://rmarkdown.rstudio.com).
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+// add `data-at-shortcutkeys` attribute to <body> to resolve conflicts with JAWS
+// screen reader (see PR #262)
+(function(d) {
+  let res = {};
+  d.querySelectorAll('.remark-help-content table tr').forEach(tr => {
+    const t = tr.querySelector('td:nth-child(2)').innerText;
+    tr.querySelectorAll('td:first-child .key').forEach(key => {
+      const k = key.innerText;
+      if (/^[a-z]$/.test(k)) res[k] = t;  // must be a single letter (key)
+    });
+  });
+  d.body.setAttribute('data-at-shortcutkeys', JSON.stringify(res));
+})(document);
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

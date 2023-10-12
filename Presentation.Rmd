@@ -1,0 +1,552 @@
+---
+title: "Hierarchical Forecasting of Emergency Department Attendance"
+subtitle: "⚔<br/> with NHS"
+author: "Janice Hsu"
+institute: "Monash University"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+
+
+
+---
+class: inverse, center, middle
+
+# Base Forecasting vs. Hierarchical Forecasting
+
+### Different types of time series data
+
+---
+
+# Hierchical Structure
+
+```{r setup, include=FALSE}
+# Required Libraries
+library(zoo)
+library(ggplot2)
+library(lubridate)
+library(tsibble)
+library(tidyverse)
+library(fpp3)
+library(hts)
+library(dplyr)
+library(tidyr)
+library(forecast)
+library(Metrics)
+library(purrr)
+library(tidyr)
+library(stats)
+library(fable)
+library(dplyr)
+library(igraph)
+library(ggraph)
+library(patchwork)
+library(gridExtra)
+
+```
+
+```{r data, include=FALSE}
+data <- read.csv("HLTH0037_ts_cleaned.csv")
+```
+
+
+```{r include=FALSE}
+# change data structure
+data <- data %>%
+  mutate(YearMonth = yearmonth(YearMonth)) %>%
+  as_tsibble(index = YearMonth, key = c(Age_Code, Sex_ItemName_ENG, Hospital_Code, Hospital_ItemName_ENG)) 
+
+```
+
+
+```{r small-plot, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%',out.height='60%', fig.align='center', class.output='center-plot'}
+library(igraph)
+
+# Nodes data
+nodes_df <- data.frame(
+  name = c("All Wales", 
+           "Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+           "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching", 
+           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+           "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+# Edges data
+edges_df <- data.frame(
+  from = c(rep("All Wales", 6), 
+           rep("Betsi Cadwaladr", 5)),
+  to = c("Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+         "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching",
+         "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+         "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+# Creating graph object
+graph <- graph_from_data_frame(d = edges_df, vertices = nodes_df, directed = TRUE)
+
+# Color vector: 1 color for "All Wales", 6 colors for organisations, and 5 colors for hospitals
+vertex_colors <- c("skyblue", rep("lightgreen", 6), rep("lightpink", 5))
+
+# Plot the graph
+plot(graph, 
+     vertex.size = 15, 
+     vertex.label.cex = 0.6,  
+     vertex.color = vertex_colors,  
+     edge.arrow.size = 0.5, 
+     vertex.label.degree = pi/4, # 45-degree label rotation
+     layout = layout.reingold.tilford(graph, root = 1))
+
+```
+
+---
+
+# Number of patients entering ED under different hospital hierarchy
+```{r attendance1, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%',out.height='60%', fig.align='center', class.output='center-plot'}
+# Aggregate the data
+data_hts <- data %>%
+  aggregate_key(Organisation/Hospital_ItemName_ENG, attendance = sum(Data))
+
+# Plot the aggregated data
+
+data_hts |>
+  filter(is_aggregated(Hospital_ItemName_ENG)) |>
+  autoplot(attendance) +
+  labs(y = "Number of patients",
+       title = "Number of patients who enter ED") +
+  facet_wrap(vars(Organisation), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1)) 
+```
+---
+```{r data_grouped, echo=FALSE, warning=FALSE}
+# mutate Aggregated_Organisation due to the change of the health boards
+
+data_grouped <- data %>%
+  mutate(Aggregated_Organisation = case_when(
+    Organisation %in% c("Cwm Taf", "Cwm Taf Morgannwg", "Abertawe Bro Morgannwg", "Swansea Bay") ~ "Grouped_4_organisation",
+    TRUE ~ Organisation
+  ))
+
+```
+
+class: center
+## There are 6 Local Health Boards
+
+- Aneurin Bevan
+- Betsi Cadwaladr
+- Hywel Dda
+- Grouped_4_organisation
+- Cardiff & Vale
+- Powys Teaching
+---
+
+```{r hts, echo = FALSE, warning=FALSE}
+data2_hts <- data_grouped %>%
+  group_by(Aggregated_Organisation) %>%
+  summarise(attendance = sum(Data)) 
+```
+
+# Number of patients who enter ED under 6 different local health boards
+```{r attendance2, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%', out.height='60%', fig.align='center', class.output='center-plot'}
+data2_hts |>
+  ggplot(aes(x = YearMonth, y = attendance)) +
+  geom_line(stat = "identity") +
+  labs(y = "Number of patients",
+       title = "Number of patients who enter ED") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", ncol = 3) +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+---
+# Findings:
+- COVID-19 caused significant changes in patient attendance.
+
+- Due to health regulations and concerns about virus infection, attendance at many local health boards decreased during the pandemic.
+
+- The post-pandemic period showed a rise in attendance, with various boards showing distinct recovery path.
+
+- Powys Teaching noticeably departed from the general upward recovery trend.
+
+- Data show that attendance patterns appear to be seasonal across all health boards.
+
+- Future efforts should concentrate on determining this seasonality's sources, effects, and incorporation into predictive forecasting models.
+
+---
+
+# Seasonality of number of attendances
+
+```{r stl, echo=FALSE, warning=FALSE}
+
+# Decompose time series for each health board using STL
+stl_decompositions <- data2_hts %>%
+  split(.$Aggregated_Organisation) %>%
+  purrr::map(function(data){
+    ts_data <- ts(data$attendance, frequency = 12)
+    stl(ts_data, s.window = "periodic")
+  })
+
+# Convert the decompositions to a tidy data frame
+stl_df <- purrr::map2_dfr(stl_decompositions, names(stl_decompositions), 
+                          ~{
+                            time_series <- as.data.frame(.x$time.series)
+                            time_series$Aggregated_Organisation <- .y
+                            return(time_series)
+                          })
+
+```
+
+
+```{r length, echo=FALSE, warning=FALSE}
+num_months <- length(unique(data2_hts$YearMonth))
+num_orgs <- length(unique(data2_hts$Aggregated_Organisation))
+
+# Correct assignment for YearMonth column
+stl_df$YearMonth <- rep(unique(data2_hts$YearMonth), times = num_orgs)
+
+```
+
+### Plotting
+
+```{r longer, echo=FALSE, warning=FALSE}
+stl_df_tidy <- stl_df %>%
+  tidyr::pivot_longer(cols = c(trend, seasonal, remainder), 
+                      names_to = "component", 
+                      values_to = "value")
+
+```
+
+
+```{r stl_decom, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%', out.height='60%', fig.align='center', class.output='center-plot'}
+stl_df_tidy %>%
+  ggplot(aes(x = YearMonth, y = value, color = component)) +
+  geom_line() +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", ncol = 3) +
+  labs(title = "STL Decomposition of ED Attendance",
+       y = "Number of Patients",
+       color = "Component") +
+  scale_color_manual(values = c("blue", "green", "red"),
+                     breaks = c("trend", "seasonal", "remainder"),
+                     labels = c("Trend", "Seasonal", "Residual")) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+---
+class: center
+
+- **Similar trends:** Consistent patient attendance patterns are revealed by STL decomposition across all health boards.
+  
+- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilization or access.
+  
+- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, according to seasonal variations.
+  
+---
+
+```{r  echo=FALSE, warning=FALSE}
+#Change the data into wide format
+data2_wide <- data_grouped %>%
+  group_by(Aggregated_Organisation) %>%
+  index_by(YearMonth) %>%
+  summarise(attendance = sum(Data)) %>%
+  pivot_wider(names_from = Aggregated_Organisation, values_from = attendance)
+
+
+```
+
+```{r  echo=FALSE, warning=FALSE}
+data2_wide <- as_tibble(data2_wide)
+data2_wide <- data2_wide %>%
+   mutate(Total = rowSums(select(., c("Aneurin Bevan", "Betsi Cadwaladr", "Cardiff & Vale", "Grouped_4_organisation", "Hywel Dda", "Powys Teaching")), na.rm = TRUE))
+
+```
+
+
+
+# Forecast with ARIMA
+
+
+
+```{r  echo=FALSE, warning=FALSE}
+
+# Define the forecast horizon and validation period
+h <- 12
+validation_period <- 6
+
+```
+
+
+
+```{r  echo=FALSE, warning=FALSE}
+# Splitting the data into training and testing sets
+training_data <- head(data2_wide, nrow(data2_wide) - validation_period)
+test_data <- tail(data2_wide, validation_period)
+
+```
+
+
+```{r  echo=FALSE, warning=FALSE}
+
+cols_to_forecast <- c("Aneurin Bevan", "Betsi Cadwaladr", "Cardiff & Vale", "Grouped_4_organisation", "Hywel Dda", "Powys Teaching", "Total")
+forecast_list <- list()
+
+arima_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  arima_model <- auto.arima(ts_data)
+  forecast_list[[col]] <- forecast(arima_model, h = h)
+}
+```
+
+
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot', fig.show='asis'}
+
+arima_plots <- list()
+for (col in cols_to_forecast) {
+  
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+   p <- autoplot(forecast_list[[col]]) + 
+        autolayer(actual_ts, series='Actual', PI=FALSE) + 
+        labs(title = paste('Forecast vs Actual for', col)) + 
+        theme(legend.position = 'bottom')
+    
+    arima_plots[[col]] <- p
+}
+
+
+
+```
+
+
+
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Total']])
+```
+---
+
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Aneurin Bevan']])
+```
+
+
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Betsi Cadwaladr']])
+```
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Cardiff & Vale']])
+```
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Grouped_4_organisation']])
+```
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Hywel Dda']])
+```
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Hywel Dda']])
+```
+
+---
+# Arima model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(arima_plots[['Powys Teaching']])
+```
+
+
+---
+# Forecasting with ETS
+
+```{r echo = FALSE}
+
+ets_forecast_list <- list()
+start_year <- year(min(training_data$YearMonth))
+start_month <- month(min(training_data$YearMonth))
+
+for (Aggregated_Organisation in cols_to_forecast) {
+  ts_data <- ts(training_data[[Aggregated_Organisation]], start = c(start_year, start_month), frequency = 12)
+  ets_model <- ets(ts_data) 
+  forecast_list[[Aggregated_Organisation]] <- forecast(ets_model, h = h)
+}
+
+
+```
+
+
+
+```{r  echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot', fig.show='asis'}
+
+ets_plots <- list()
+for (col in cols_to_forecast) {
+  
+  end_year_train <- year(max(training_data$YearMonth))
+  end_month_train <- month(max(training_data$YearMonth))
+  
+  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
+  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
+  
+  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
+  
+   p <- autoplot(forecast_list[[col]]) + 
+        autolayer(actual_ts, series='Actual', PI=FALSE) + 
+        labs(title = paste('Forecast vs Actual for', col)) + 
+        theme(legend.position = 'bottom')
+    
+    ets_plots[[col]] <- p
+}
+
+
+
+```
+
+
+
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Total']])
+```
+---
+
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Aneurin Bevan']])
+```
+
+
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Betsi Cadwaladr']])
+```
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Cardiff & Vale']])
+```
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Grouped_4_organisation']])
+```
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Hywel Dda']])
+```
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Hywel Dda']])
+```
+
+---
+# ETS model
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
+print(ets_plots[['Powys Teaching']])
+```
+
+---
+
+class: center
+**Result:**
+
+- With Cardiff & Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
+
+---
+class: center
+
+- **Base forecasting:** applied when forecasting simple time series.
+
+- **Reconciliation forecasting (Hierarchical forecasting):** it includes forecasting on different levels of aggregation, and it should be applied when dealing with hierarchical or grouped time series.
+
+- **Notes:** RMSE and MAE should not be used for the hierarchical time series data (Problems with reconciliation, Metric incomparability)
+
+---
+
+# Reconciliation
+
+## Step 1: Aggregate the data
+
+
+```{r echo=FALSE, warning=FALSE}
+data_grouped_age <- data_grouped %>%
+  filter(Age_Code != "Unknown") %>%
+  mutate(Grouped_Age = case_when(
+    Age_Code == "0 to 4" ~ "0-4",
+    Age_Code == "5 to 17" ~ "5-17",
+    Age_Code %in% c("18 to 24", "25 to 29", "30 to 34", "35 to 39", 
+                    "40 to 44", "45 to 49", "50 to 54", "55 to 59", 
+                    "60 to 64", "65 to 69") ~ "18-69",
+    Age_Code %in% c("70 to 74", "75 to 79", "80 to 84", "85") ~ "70 and over",
+    TRUE ~ "Other"
+  ))
+
+```
+
+
+```{r}
+# hierarchy with age group
+data_hts <- data_grouped_age |>
+  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
+```
+
+
+```{r}
+# hierarchy without age group, only aggregate with the organisation, wales as a big picture
+data_wales <- data_grouped_age |>
+  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
+```
+
+
+
+# Thanks!
+
+Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
+
+The chakra comes from [remark.js](https://remarkjs.com), [**knitr**](https://yihui.org/knitr/), and [R Markdown](https://rmarkdown.rstudio.com).
