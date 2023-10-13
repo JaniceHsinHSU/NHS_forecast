@@ -64,7 +64,7 @@ data <- data %>%
 ```
 
 
-```{r small-plot, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%',out.height='60%', fig.align='center', class.output='center-plot'}
+```{r small-plot, echo=FALSE, message=FALSE, warning=FALSE, out.width='80%',out.height='80%', fig.align='center', class.output='center-plot'}
 library(igraph)
 
 # Nodes data
