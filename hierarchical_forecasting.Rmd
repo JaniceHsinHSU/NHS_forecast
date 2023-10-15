@@ -53,15 +53,15 @@ data <- read.csv("HLTH0037_ts_cleaned.csv")
 
 ## Data Introduction
 
-The dataset contains 10 variables related to the hospitals and information of patients in Wales, UK. Here are the brief summary of the dataset:
+The dataset contains variables related to monthly Emergency Attendances in hospitals in Wales, UK. The data was publicly available and retrieved from StatsWales.
 
-- Data: This column represents the number of attendance in each emergency department.
+- Data: This column represents the aggregated number of attendances in each emergency department. The data was aggregated according to the other columns.
 
-- YearMonth: This column represents dates in the year-month format. Additionally, this dataset contains data from 2012 April to 2023 May.
+- YearMonth: This column represents data from 2012 April to 2023 June (135 time points).
 
-- Age_Code: This column provides the age group that the patient is in. There are 17 different age groups. They are "0 to 4","5 to 17","18 to 24","25 to 29","30 to 34","35 to 39","40 to 44","45 to 49","50 to 54","55 to 59","60 to 64","65 to 69","70 to 74","75 to 79","80 to 84","85" and "Unknown".
+- Age_Code: This column provides the patient's age group. There are 17 different age groups: "0 to 4","5 to 17","18 to 24","25 to 29","30 to 34","35 to 39","40 to 44","45 to 49","50 to 54","55 to 59","60 to 64","65 to 69","70 to 74","75 to 79","80 to 84","85" and "Unknown".
 
-- Sex_ItemName_ENG: This column provides the information of patient's gender. 
+- Sex_ItemName_ENG: This column provides patient’s gender using 3 categories: “Female”, “Male” and “Unknown”.
 
 - Hospital_Code: This column represents 42 different hospitals in Wales.
 
@@ -71,11 +71,14 @@ The dataset contains 10 variables related to the hospitals and information of pa
 
 - Hospital_AltCode1: This column provides an alternate code for the hospital.
 
-- Organisation: This column represents the health board.
+- Organisation: This column represents the Local Health Board (LHB), which are responsible for planning and delivering NHS Wales services in their areas, including Emergency Care. In Wales there are 7 distinct LHBs, however two of them, Cwm Taf Morgannwg and Swansea Bay, were previously (before 1 st of April 2019) known as Cwm Taf and Abertawe Bro Morgannwg (therefore this column contains 9 distinct values).
 
-- Organisation_Code: A code for the organisation as well as the health board.
+- Organisation_Code: A code for the organisation as well as the LHB.
 
-- There are three hierarchies in this dataset. On the top level, there is all the hospitals in Wales, while on the second hierarchy, there are 6 different health boards which also shown as the organisations. At the bottom level, there are 42 hospitals in total.
+There are three hierarchies in this dataset:
+- On the top level, there is all the hospitals in Wales.
+- On the second level, there are the different LHB.
+- At the bottom level, there are 42 hospitals.
 
 
 
@@ -111,11 +114,9 @@ data_hts |>
         axis.text.y = element_text(angle = 0, hjust = 1)) 
 ```
 
--	A couple of Local Health Boards (LHBs) were redefined from the 1st of April 2019 onwards: Cwm Taf (27)--> Cwm Taf Morgannwg (30)// Abertawe Bro Morgannwg (26) --> Swansea Bay (31). Therefore, if you decide to forecast at LHB resolution, you might want to consider these 4 as a unique one. 
+As already mentioned, two LHBs were redefined from the 1st of April 2019 onwards: Cwm Taf ((# hospitals = 27)--> Cwm Taf Morgannwg ((# hospitals = 30)// Abertawe Bro Morgannwg ((# hospitals = 26) --> Swansea Bay ((# hospitals = 31). 
 
--	The Princess of Wales Hospital changed its Local Health Boards
-
--	So we analyse these 4 as one organisation
+Since the number of hospitals included before and after the change in each LHB was different, these 4 organisations were aggregated into one unique group to enable their inclusion in the forecasting analysis (defined as “Grouped_4_organisation”in the code snippets).
 
 \newpage
 
@@ -190,7 +191,7 @@ By using this understood seasonality to improve forecasting models and ensuring 
 
 ## Seasonality of number of attendances
 
-To investigate deeper into the potential seasonality in the data, I would like to decompose the time series according the each health board. It allows us to discover the trend, seasonality and the residual components.
+To further explore whether there was any trend and/or seasonality in the data by LHB, the time series was decomposed using the STL method and the extracted components (trend, seasonal and residuals) plotted:
 
 
 
@@ -480,12 +481,11 @@ Upon first glance, it appears that the ETS model offers a relatively close align
 
 -Consistent Decline in Predictions:
 
-Downtrend in 2023: Regardless of the model used, all forecasts uniformly point to a decline in trends during the second half of 2023. This might be explained by the historical data's apparent cyclical nature. In other words, the historical data reveals a pattern in which peaks frequently appear in the middle of the year and then descend into troughs at year's end and the beginning of the next year. This apparent phenomena may have a significant impact on the expected downturn in 2023.
+Downtrend in 2023: Regardless of the model used, all forecasts uniformly point to a decline in trends during the second half of 2023. This might be explained by the historical data's apparent cyclical nature. In other words, the historical data reveals a pattern in which peaks frequently appear in the middle of the year and then descend into troughs at year's end and the beginning of the next year. This recurrent pattern may have a significant impact on the expected downturn in 2023.
 
 In light of the above, it is crucial to approach model selection with a nuanced comprehension of the underlying data and impacting factors, even though the ETS model shows a potentially higher prediction accuracy within the given circumstances. 
 
-Therefore, I would like to conduct an accuracy analysis upon both arima and ets models.
-
+An accuracy analysis was then carried out upon for both ARIMA and ETS models to further assess the quality of their predictions.
 
 # Accuracy assessment for ARIMA and ETS
 
@@ -742,7 +742,7 @@ print(plot_list)
 
 ```
 
-```{r}
+```{r thinking_if_should_disregard_the_t_test}
 # Running t-tests and extracting p-value and t-value
 t_test_summary <- joined_data %>%
   summarise(
@@ -754,7 +754,7 @@ t_test_summary <- joined_data %>%
 print(t_test_summary)
 
 ```
-The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significant different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
+The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significantly different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
 
 
 
@@ -801,23 +801,18 @@ forecast_wales_avg <- wales_rc %>%
 ```
 
 ```{r}
-forecast_wales_avg$Aggregated_Organisation <- factor(forecast_wales_avg$Aggregated_Organisation)
-
 forecast_wales_avg <- forecast_wales_avg %>%
   rename(attendance = mean_attendance)
 ```
 
-
-
 ```{r}
+data_wales$Aggregated_Organisation <- as.factor(data_wales$Aggregated_Organisation)
+data2_hts$Aggregated_Organisation <- as.factor(data2_hts$Aggregated_Organisation)
+forecast_wales_avg$Aggregated_Organisation <- as.factor(forecast_wales_avg$Aggregated_Organisation)
 
-combined_data_rc <- bind_rows(data2_hts, forecast_wales_avg)
+combined_data_rc <- bind_rows(data_wales, data2_hts, forecast_wales_avg)
 
 ```
-
-
-
-
 
 
 

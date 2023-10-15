@@ -17,12 +17,20 @@ output:
 ---
 class: inverse, center, middle
 
+# Introduction:
+
+- Collaborate with NHS in the UK
+- Forecast
+
+
+
+---
+class: inverse, center, middle
+
 # Base Forecasting vs. Hierarchical Forecasting
 
 ### Different types of time series data
-
 ---
-
 # Hierchical Structure
 
 ```{r setup, include=FALSE}
@@ -72,7 +80,7 @@ nodes_df <- data.frame(
   name = c("All Wales", 
            "Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
            "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching", 
-           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital",
            "Holywell Community Hospital", "Mold Community Hospital"),
   stringsAsFactors = FALSE
 )
@@ -88,24 +96,32 @@ edges_df <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# Creating graph object
+
 graph <- graph_from_data_frame(d = edges_df, vertices = nodes_df, directed = TRUE)
 
-# Color vector: 1 color for "All Wales", 6 colors for organisations, and 5 colors for hospitals
+
 vertex_colors <- c("skyblue", rep("lightgreen", 6), rep("lightpink", 5))
 
+
 # Plot the graph
-plot(graph, 
-     vertex.size = 15, 
-     vertex.label.cex = 0.6,  
-     vertex.color = vertex_colors,  
-     edge.arrow.size = 0.5, 
-     vertex.label.degree = pi/4, # 45-degree label rotation
+plot(graph,
+     vertex.size = 15,
+     vertex.label = NA,  # Do not add labels
+     vertex.color = vertex_colors,
+     edge.arrow.size = 0.5,
      layout = layout.reingold.tilford(graph, root = 1))
+legend("bottomright",
+       legend = V(graph)$name,
+       fill = vertex_colors,
+       cex = 0.5,
+       title = "Nodes",
+       box.lty = 0)
+
 
 ```
 
 ---
+
 
 # Number of patients entering ED under different hospital hierarchy
 ```{r attendance1, echo=FALSE, message=FALSE, warning=FALSE, out.width='60%',out.height='60%', fig.align='center', class.output='center-plot'}
@@ -743,20 +759,41 @@ forecast_wales_avg <- wales_rc %>%
 ```{r echo=FALSE, warning=FALSE}
 forecast_wales_avg$Aggregated_Organisation <- factor(forecast_wales_avg$Aggregated_Organisation)
 
+forecast_wales_avg <- forecast_wales_avg %>%
+  rename(attendance = mean_attendance)
+
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-ggplot(forecast_wales_avg, aes(x = YearMonth, y = mean_attendance)) +
-  geom_line() +
-  labs(title = "Average Attendance Forecast",
-       x = "Year and Month",
-       y = "Average Attendance") +
-  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
-  theme_minimal()+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text.y = element_text(angle = 0, hjust = 1))
-  
+
+```{r echo=FALSE, warning=FALSE}
+
+combined_data_rc <- bind_rows(data2_hts, forecast_wales_avg)
+
 ```
+
+
+```{r echo=FALSE, warning=FALSE}
+
+combined_data_rc <- combined_data_rc %>%
+  mutate(data_type = if_else(YearMonth < ymd("2023-06-01"), "Historical", "Forecast"))
+
+
+# Plotting
+ggplot(combined_data_rc, aes(x = YearMonth, y = attendance, color = data_type)) +
+  geom_line() +
+  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Attendance Over Time",
+       subtitle = "Distinguishing between historical and forecasted data",
+       x = "Year and Month",
+       y = "Attendance",
+       color = "Data Type") +
+  scale_color_manual(values = c("Historical" = "blue", "Forecast" = "red"))
+
+```
+
+
+
 
 ---
 class: center, middle
