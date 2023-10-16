@@ -419,18 +419,6 @@ print(accuracy_value)
 ![](Presentation_files/figure-html/unnamed-chunk-53-1.png)&lt;!-- --&gt;
 ---
 # A closer look:
-
-```r
-forecast_wales_avg %&gt;%
-  ggplot( aes(x = YearMonth, y = attendance)) +
-  geom_line() +
-  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
-  theme_minimal() +
-  labs(title = "Attendance Over Time",
-       x = "Year and Month",
-       y = "Attendance")
-```
-
 ![](Presentation_files/figure-html/unnamed-chunk-54-1.png)&lt;!-- --&gt;
 
 

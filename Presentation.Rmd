@@ -895,7 +895,7 @@ ggplot(combined_data_rc, aes(x = YearMonth, y = attendance, color = data_type)) 
 ```
 ---
 # A closer look:
-```{r}
+```{r echo = FALSE, warning=FALSE}
 forecast_wales_avg %>%
   ggplot( aes(x = YearMonth, y = attendance)) +
   geom_line() +
