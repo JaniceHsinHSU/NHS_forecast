@@ -1,6 +1,6 @@
 ---
 title: "Hierarchical Forecasting of Emergency Department Attendance"
-subtitle: "<br/> with NHS"
+subtitle: "<br/> with NHS Wales"
 author: "Janice Hsu"
 institute: "Monash University"
 date: "`r Sys.Date()`"
@@ -19,8 +19,11 @@ class: inverse, center, middle
 
 # Introduction:
 
-- Collaborate with NHS in the UK
-- Forecast
+- Collaborate with National Health Service (NHS)- Wales in the UK
+- Data length: 2012 Apr - 2023 Jun 
+- Data frequency: monthly (135 time points)
+- Goal of the project: forecast 6 months ahead of the emergency department attendance
+- Use of the forecasting methods: base forecasting and hierarchical forecasting
 
 
 
@@ -198,7 +201,7 @@ data2_hts |>
 
 ---
 
-# Seasonality of number of attendances
+# STL decomposition
 
 ```{r stl, echo=FALSE, warning=FALSE}
 
@@ -257,6 +260,19 @@ stl_df_tidy %>%
 
 ```
 
+---
+# Seasonality of number of attendances
+
+```{r echo=FALSE, warning=FALSE , message=FALSE}
+data_grouped |> 
+  group_by(Aggregated_Organisation) |>
+  summarise(`Number of patients` = sum(Data)) |>
+  gg_season() +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", nrow = 3)+
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Seasonal plots of ED Attendances (by LHB)")
+```
 
 
 ---
@@ -264,9 +280,9 @@ class: center, middle
 
 - **Similar trends:** Consistent patient attendance patterns are revealed by STL decomposition across all health boards.
   
-- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilization or access.
+- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilisation or access.
   
-- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, according to seasonal variations.
+- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, also drop in April and November, according to seasonal variations.
   
 ---
 
@@ -347,7 +363,8 @@ for (col in cols_to_forecast) {
    p <- autoplot(forecast_list[[col]]) + 
         autolayer(actual_ts, series='Actual', PI=FALSE) + 
         labs(title = paste('Forecast vs Actual for', col)) + 
-        theme(legend.position = 'bottom')
+        theme(legend.position = 'bottom')+
+     ylab("Attendance")
     
     arima_plots[[col]] <- p
 }
@@ -447,7 +464,8 @@ for (col in cols_to_forecast) {
    p <- autoplot(forecast_list[[col]]) + 
         autolayer(actual_ts, series='Actual', PI=FALSE) + 
         labs(title = paste('Forecast vs Actual for', col)) + 
-        theme(legend.position = 'bottom')
+        theme(legend.position = 'bottom')+
+     ylab("Attendance")
     
     ets_plots[[col]] <- p
 }
@@ -500,6 +518,103 @@ print(ets_plots[['Hywel Dda']])
 ```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
 print(ets_plots[['Powys Teaching']])
 ```
+
+---
+# Calculating Accuracy Metrics for ARIMA and ETS
+```{r echo=FALSE, warning=FALSE}
+# Lists to store forecasts and error metrics
+arima_forecast_list <- list()
+ets_forecast_list <- list()
+arima_error_metrics <- list()
+ets_error_metrics <- list()
+```
+
+
+```{r  echo=FALSE, warning=FALSE}
+# Forecasting with ARIMA and ETS
+for (col in cols_to_forecast) {
+  ts_data <- ts(training_data[[col]], start = c(start_year, start_month), frequency = 12)
+  
+  # ARIMA model
+  arima_model <- auto.arima(ts_data)
+  arima_forecast <- forecast(arima_model, h = h)
+  arima_forecast_list[[col]] <- arima_forecast
+  
+  # ETS model
+  tryCatch({
+    ets_model <- ets(ts_data)
+    ets_forecast <- forecast(ets_model, h = h)
+    ets_forecast_list[[col]] <- ets_forecast
+  }, error = function(e) {
+    cat("Error in forecasting for column:", col, "with message:", e$message, "\n")
+  })
+}
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+
+for (col in cols_to_forecast) {
+  actual <- test_data[[col]]
+  
+  arima_forecasted <- head(arima_forecast_list[[col]]$mean, validation_period)
+  
+  # ARIMA metrics
+  arima_MAE <- mae(actual, arima_forecasted)
+  arima_RMSE <- rmse(actual, arima_forecasted)
+  arima_MAPE <- tryCatch(mape(actual, arima_forecasted), error = function(e) NA)
+  arima_error_metrics[[col]] <- list(MAE = arima_MAE, RMSE = arima_RMSE, MAPE = arima_MAPE)
+  
+  # Check if ETS forecast exists for the column to avoid errors
+  if (!is.null(ets_forecast_list[[col]])) {
+    ets_forecasted <- head(ets_forecast_list[[col]]$mean, validation_period)
+    
+    # ETS metrics
+    ets_MAE <- mae(actual, ets_forecasted)
+    ets_RMSE <- rmse(actual, ets_forecasted)
+    ets_MAPE <- tryCatch(mape(actual, ets_forecasted), error = function(e) NA)
+    ets_error_metrics[[col]] <- list(MAE = ets_MAE, RMSE = ets_RMSE, MAPE = ets_MAPE)
+  }
+}
+
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+TableAccuracyMetrics <-
+  rbind(
+    # aggregate ARIMA accuracy metrics
+    as.data.frame(
+      do.call(rbind,unlist(arima_error_metrics, recursive=FALSE))
+      ) |>
+      rename(Metric = V1) |>
+      rownames_to_column("LHB") |>
+      mutate(
+        Metric = round(Metric,3),
+        Model = "ARIMA"
+        ),
+    
+    # aggregate ETS accuracy metrics
+    as.data.frame(
+      do.call(rbind,unlist(ets_error_metrics, recursive=FALSE))
+      ) |>
+      rename(Metric = V1) |>
+      rownames_to_column("LHB") |>
+      mutate(
+        Metric = round(Metric,3),
+        Model = "ETS"
+        )
+    ) |>
+  
+  ## wrangle table from long to wide format
+  tidyr::pivot_wider(
+    names_from = Model, 
+    values_from = Metric
+  )
+
+TableAccuracyMetrics |> knitr::kable()
+```
+
 
 ---
 
@@ -665,7 +780,7 @@ plot_list <- map(unique_organisations, ~{
 
 
 
-# Step 3: Forecast
+# Step 3: Forecast based on the time series cross validation
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
 plot_list[[1]]
@@ -706,25 +821,8 @@ plot_list[[7]]
 ```
 
 ---
-# Running t-tests and extracting p-value and t-value
-```{r}
 
-t_test_summary <- joined_data %>%
-  summarise(
-    t_value = list(t.test(attendance, forecast)$statistic),
-    p_value = list(t.test(attendance, forecast)$p.value)
-  ) %>%
-  unnest(cols = c(t_value, p_value))
-
-print(t_test_summary)
-
-```
-
-The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significant different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
-
----
-
-# Reconcile
+# Reconciliation
 
 
 ```{r echo=FALSE, warning=FALSE}
@@ -757,7 +855,6 @@ forecast_wales_avg <- wales_rc %>%
 ```
 
 ```{r echo=FALSE, warning=FALSE}
-forecast_wales_avg$Aggregated_Organisation <- factor(forecast_wales_avg$Aggregated_Organisation)
 
 forecast_wales_avg <- forecast_wales_avg %>%
   rename(attendance = mean_attendance)
@@ -766,10 +863,15 @@ forecast_wales_avg <- forecast_wales_avg %>%
 
 
 ```{r echo=FALSE, warning=FALSE}
+data_wales$Aggregated_Organisation <- as.factor(data_wales$Aggregated_Organisation)
+data2_hts$Aggregated_Organisation <- as.factor(data2_hts$Aggregated_Organisation)
+forecast_wales_avg$Aggregated_Organisation <- as.factor(forecast_wales_avg$Aggregated_Organisation)
 
-combined_data_rc <- bind_rows(data2_hts, forecast_wales_avg)
+combined_data_rc <- bind_rows(data_wales, data2_hts, forecast_wales_avg)
 
 ```
+
+
 
 
 ```{r echo=FALSE, warning=FALSE}
@@ -791,19 +893,26 @@ ggplot(combined_data_rc, aes(x = YearMonth, y = attendance, color = data_type)) 
   scale_color_manual(values = c("Historical" = "blue", "Forecast" = "red"))
 
 ```
-
-
+---
+# A closer look:
+```{r}
+forecast_wales_avg %>%
+  ggplot( aes(x = YearMonth, y = attendance)) +
+  geom_line() +
+  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Attendance Over Time",
+       x = "Year and Month",
+       y = "Attendance")
+```
 
 
 ---
 class: center, middle
 # Conclusion
 
-Why the Trend is Declining:
-
-- External Factors: Societal changes, economic downturns, and pandemics can all have a big impact. For instance, the COVID-19 pandemic reduced hospital visits as a result of patients' concern over spreading the illness.
-
-- Changes in healthcare legislation, policies, or insurance provisions may deter people from obtaining medical care unless it is absolutely essential.
+Why the forecast is declining:
 
 - Seasonal Effects: Some months or seasons may naturally draw lesser crowds, maybe as a result of a lack of prevalent diseases or ailments that peak in other months.
 
+- Holiday Effects: Vieira et al 2023: "[on holidays] people may prefer to postpone their visit to the ED rather than lose their free time"

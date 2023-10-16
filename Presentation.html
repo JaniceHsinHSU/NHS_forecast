@@ -4,7 +4,7 @@
     <title>Hierarchical Forecasting of Emergency Department Attendance</title>
     <meta charset="utf-8" />
     <meta name="author" content="Janice Hsu" />
-    <meta name="date" content="2023-10-15" />
+    <meta name="date" content="2023-10-17" />
     <script src="libs/header-attrs-2.25/header-attrs.js"></script>
     <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
     <link href="libs/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
@@ -17,7 +17,7 @@ class: center, middle, inverse, title-slide
 # Hierarchical Forecasting of Emergency Department Attendance
 ]
 .subtitle[
-## <br/> with NHS
+## <br/> with NHS Wales
 ]
 .author[
 ### Janice Hsu
@@ -26,7 +26,7 @@ class: center, middle, inverse, title-slide
 ### Monash University
 ]
 .date[
-### 2023-10-15
+### 2023-10-17
 ]
 
 ---
@@ -35,8 +35,11 @@ class: inverse, center, middle
 
 # Introduction:
 
-- Collaborate with NHS in the UK
-- Forecast
+- Collaborate with National Health Service (NHS)- Wales in the UK
+- Data length: 2012 Apr - 2023 Jun 
+- Data frequency: monthly (135 time points)
+- Goal of the project: forecast 6 months ahead of the emergency department attendance
+- Use of the forecasting methods: base forecasting and hierarchical forecasting
 
 
 
@@ -98,7 +101,7 @@ class: inverse, center, middle
 
 ---
 
-# Seasonality of number of attendances
+# STL decomposition
 
 
 
@@ -112,6 +115,10 @@ class: inverse, center, middle
 
 &lt;img src="Presentation_files/figure-html/stl_decom-1.png" width="60%" height="60%" style="display: block; margin: auto;" /&gt;
 
+---
+# Seasonality of number of attendances
+
+![](Presentation_files/figure-html/unnamed-chunk-2-1.png)&lt;!-- --&gt;
 
 
 ---
@@ -119,9 +126,9 @@ class: center, middle
 
 - **Similar trends:** Consistent patient attendance patterns are revealed by STL decomposition across all health boards.
   
-- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilization or access.
+- **Impact of COVID-19:** The Covid-19 era is marked by a noticeable drop in attendance, which implies to a significant impact on healthcare utilisation or access.
   
-- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, according to seasonal variations.
+- **An increase in mid-year attendance:** Every year, there is a noticeable rise in patient attendance around June or July, also drop in April and November, according to seasonal variations.
   
 ---
 
@@ -154,17 +161,13 @@ class: center, middle
 
 
 
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-8-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
----
-
-# Arima model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-9-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
-
-
 ---
+
 # Arima model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-10-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
 
 ---
 # Arima model
@@ -186,6 +189,10 @@ class: center, middle
 # Arima model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-15-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
+---
+# Arima model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-16-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
 
 ---
 # Forecasting with ETS
@@ -198,17 +205,13 @@ class: center, middle
 
 
 
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-18-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
----
-
-# ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-19-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
-
-
 ---
+
 # ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-20-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
 
 ---
 # ETS model
@@ -222,10 +225,51 @@ class: center, middle
 # ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-23-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
-
 ---
 # ETS model
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-24-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+
+---
+# ETS model
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-25-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+# Calculating Accuracy Metrics for ARIMA and ETS
+
+
+
+
+
+
+
+
+
+
+|LHB                         |    ARIMA|      ETS|
+|:---------------------------|--------:|--------:|
+|Aneurin Bevan.MAE           | 1748.634|  688.417|
+|Aneurin Bevan.RMSE          | 1992.543|  801.644|
+|Aneurin Bevan.MAPE          |    0.113|    0.048|
+|Betsi Cadwaladr.MAE         | 3157.257|  915.735|
+|Betsi Cadwaladr.RMSE        | 3756.403| 1050.122|
+|Betsi Cadwaladr.MAPE        |    0.156|    0.049|
+|Cardiff &amp; Vale.MAE          |  600.429|  654.811|
+|Cardiff &amp; Vale.RMSE         |  648.376|  799.030|
+|Cardiff &amp; Vale.MAPE         |    0.050|    0.057|
+|Grouped_4_organisation.MAE  | 1386.277| 1089.509|
+|Grouped_4_organisation.RMSE | 1598.559| 1315.071|
+|Grouped_4_organisation.MAPE |    0.052|    0.043|
+|Hywel Dda.MAE               |  804.597|  763.085|
+|Hywel Dda.RMSE              |  923.853|  905.503|
+|Hywel Dda.MAPE              |    0.058|    0.059|
+|Powys Teaching.MAE          |  238.265|  120.999|
+|Powys Teaching.RMSE         |  264.667|  146.796|
+|Powys Teaching.MAPE         |    0.192|    0.098|
+|Total.MAE                   | 4781.817| 4297.460|
+|Total.RMSE                  | 5601.875| 5014.551|
+|Total.MAPE                  |    0.054|    0.052|
+
 
 ---
 
@@ -325,58 +369,35 @@ print(accuracy_value)
 
 
 
-# Step 3: Forecast
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-36-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-37-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-38-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-39-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-40-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
+# Step 3: Forecast based on the time series cross validation
 
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-41-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
 ---
+
 &lt;img src="Presentation_files/figure-html/unnamed-chunk-42-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
 ---
-# Running t-tests and extracting p-value and t-value
 
-```r
-t_test_summary &lt;- joined_data %&gt;%
-  summarise(
-    t_value = list(t.test(attendance, forecast)$statistic),
-    p_value = list(t.test(attendance, forecast)$p.value)
-  ) %&gt;%
-  unnest(cols = c(t_value, p_value))
-
-print(t_test_summary)
-```
-
-```
-## # A tibble: 1 × 2
-##   t_value p_value
-##     &lt;dbl&gt;   &lt;dbl&gt;
-## 1   0.313   0.755
-```
-
-The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significant different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-43-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
 ---
 
-# Reconcile
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-44-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-45-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-46-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+&lt;img src="Presentation_files/figure-html/unnamed-chunk-47-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Reconciliation
 
 
 
@@ -393,23 +414,35 @@ The p value is relatively high. It suggests that we fail to reject the null hypo
 
 
 
-![](Presentation_files/figure-html/unnamed-chunk-49-1.png)&lt;!-- --&gt;
 
 
+![](Presentation_files/figure-html/unnamed-chunk-53-1.png)&lt;!-- --&gt;
+---
+# A closer look:
+
+```r
+forecast_wales_avg %&gt;%
+  ggplot( aes(x = YearMonth, y = attendance)) +
+  geom_line() +
+  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Attendance Over Time",
+       x = "Year and Month",
+       y = "Attendance")
+```
+
+![](Presentation_files/figure-html/unnamed-chunk-54-1.png)&lt;!-- --&gt;
 
 
 ---
 class: center, middle
 # Conclusion
 
-Why the Trend is Declining:
-
-- External Factors: Societal changes, economic downturns, and pandemics can all have a big impact. For instance, the COVID-19 pandemic reduced hospital visits as a result of patients' concern over spreading the illness.
-
-- Changes in healthcare legislation, policies, or insurance provisions may deter people from obtaining medical care unless it is absolutely essential.
+Why the forecast is declining:
 
 - Seasonal Effects: Some months or seasons may naturally draw lesser crowds, maybe as a result of a lack of prevalent diseases or ailments that peak in other months.
 
+- Holiday Effects: Vieira et al 2023: "[on holidays] people may prefer to postpone their visit to the ED rather than lose their free time"
     </textarea>
 <style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
 <script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>

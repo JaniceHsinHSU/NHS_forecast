@@ -41,7 +41,7 @@ library(fable)
 library(dplyr)
 library(igraph)
 library(ggraph)
-
+library(feasts)
 
 ```
 
@@ -193,6 +193,30 @@ By using this understood seasonality to improve forecasting models and ensuring 
 
 To further explore whether there was any trend and/or seasonality in the data by LHB, the time series was decomposed using the STL method and the extracted components (trend, seasonal and residuals) plotted:
 
+```{r}
+data_grouped |> 
+  group_by(Aggregated_Organisation) |>
+  summarise(`Number of patients` = sum(Data)) |>
+  gg_season() +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y", nrow = 3)+
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Seasonal plots of ED Attendances (by LHB)")
+```
+- Findings:
+
+1. Most LHBs have a trend whereby attendance is lower in some months, like April and November, and higher in others, like June and July.
+
+2. In many of the LHBs, the attendance in 2020 differs noticeably from other years.
+In comparison to similar months in past years, the majority of LHBs appear to have a fall or reduction in ED attendances during several months of 2020. This could be a sign of outside influences influencing access to or use of healthcare because of the pandemic.
+3. 
+- Aneurin Bevan: The middle of the year for 2020 shows a clear decline.
+- Cardiff & Vale: Attendances in 2020 appear to be continuously lower than in previous years, particularly in the early months.
+- Hywel Dda: Around mid-year, there is a noticeable decline in attendance.
+- Betsi Cadwaladr: While the trend for 2020 appears to be largely constant, several months still show a decline in attendance.
+- Grouped_4_organisation: Attendance clearly drops off during particular months.
+- Powys Teaching: The variations are more pronounced, with obvious dips during particular months.
+
 
 
 ### Decompose Time Series
@@ -253,7 +277,21 @@ stl_df_tidy %>%
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
-Based on the STL decomposition, it is evident that each health board follows a similar trend. Moreover, it is obvious that there is a significant downturn during the Covid-19 era. As for seasonality, there is a pronounced surge in the number of patient's attendance in the middle of the year (approximately in June or July). This seasonal pattern underlines the recurrent nature of patient admissions.
+
+Findings:
+
+1. Trend:
+There appears to be an upward trend in the number of ED visits over time for all LHBs, but there are outliers.
+The most obvious decline occurs around 2020, which may be a sign of the COVID-19 pandemic's effects.
+
+2. Seasonality:
+The seasonal component illustrates the periodicity in ED attendances by showing predictable patterns that repeat annually.
+There is a pronounced surge in the number of patient's attendance in the middle of the year (approximately in June or July). This seasonal pattern underlines the recurrent nature of patient admissions.
+
+3. Residuals:
+The residuals are the data's unexplained variation after the trend and seasonal components have been removed.
+The majority of LHBs have residuals that oscillate near zero, which shows that the STL decomposition has effectively caught the main trends in the data.
+
 
 
 
@@ -548,22 +586,44 @@ for (col in cols_to_forecast) {
 
 ```
 
-
-
 ### Displaying Accuracy Metrics for each Column
 ```{r}
-for (col in cols_to_forecast) {
-  cat("\nAccuracy metrics for:", col, "\n")
-  cat("--------------------------\n")
-  cat("ARIMA:\n")
-  print(arima_error_metrics[[col]])
-  cat("ETS:\n")
-  print(ets_error_metrics[[col]])
-  cat("\n")
-  cat("----------------------------------------------------\n")
-}
+TableAccuracyMetrics <-
+  rbind(
+    # aggregate ARIMA accuracy metrics
+    as.data.frame(
+      do.call(rbind,unlist(arima_error_metrics, recursive=FALSE))
+      ) |>
+      rename(Metric = V1) |>
+      rownames_to_column("LHB") |>
+      mutate(
+        Metric = round(Metric,3),
+        Model = "ARIMA"
+        ),
+    
+    # aggregate ETS accuracy metrics
+    as.data.frame(
+      do.call(rbind,unlist(ets_error_metrics, recursive=FALSE))
+      ) |>
+      rename(Metric = V1) |>
+      rownames_to_column("LHB") |>
+      mutate(
+        Metric = round(Metric,3),
+        Model = "ETS"
+        )
+    ) |>
+  
+  ## wrangle table from long to wide format
+  tidyr::pivot_wider(
+    names_from = Model, 
+    values_from = Metric
+  )
 
+TableAccuracyMetrics |> knitr::kable()
 ```
+
+
+
 
 
 - With Cardiff & Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
