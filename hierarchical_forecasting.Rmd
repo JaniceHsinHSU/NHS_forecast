@@ -6,7 +6,8 @@ output:
   bookdown::pdf_document2:
     latex_engine: xelatex
 ---
-
+- Change the accuracy test (the one with 0)
+- probably remove the seasonal effect and see if there's a pattern or sth
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.pos = "H", out.extra = "")
@@ -716,9 +717,8 @@ fit_cv<- training_data %>%
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
     tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3) 
 ```
-
 
 
 
@@ -740,20 +740,259 @@ fc_cv_filtered <- fit_cv %>%
 ```
 
 
-```{r}
+```{r accuracy_needs_to_be_updated}
 # Check the accuracy
 forecasted_values <- fc_cv_filtered$.mean
+actual_values <- test_data_filtered$attendance
+actual_values <- as.numeric(actual_values)
 
-accuracy_value <- accuracy(
-  as.data.frame(forecasted_values),as.data.frame(test_data_filtered$attendance))
+actual_values_models <- test_data$attendance
 
-print(accuracy_value)
+```
 
+```{r not_sure_if_it_should_be_calc_like_this1}
+
+errors <- actual_values - forecasted_values
+mean_abs_error <- mean(abs(errors), na.rm = TRUE)
+naive_forecast_error <- mean(abs(diff(actual_values)), na.rm = TRUE)
+
+MASE <- mean_abs_error / naive_forecast_error
+print(MASE)
 
 ```
 
 
+```{r not_sure_if_it_should_be_calc_like_this2}
+mean_squared_error <- mean(errors^2, na.rm = TRUE)
+naive_forecast_squared_error <- mean(diff(actual_values)^2, na.rm = TRUE)
+
+RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error)
+print(RMSSE)
+
+```
+
+
+
 ```{r}
+
+# Function to calculate MASE and RMSSE for a single model
+calc_scaled_errors_for_model_organisation <- function(model_name, organisation) {
+ # Get forecasted and actual values for specific model and organisation
+  fc_single_model_org <- fit_cv %>%
+    forecast(h = 12) %>%
+    filter(.model == model_name, Aggregated_Organisation == organisation)
+  
+  forecasted_values_single <- fc_single_model_org$.mean
+  
+  actual_values_org <- test_data %>%
+    filter(Aggregated_Organisation == organisation) %>%
+    pull(attendance)
+  
+  # Calculate errors
+  errors <- actual_values_org - forecasted_values_single
+  mean_abs_error <- mean(abs(errors), na.rm = TRUE)
+  mean_squared_error <- mean(errors^2, na.rm = TRUE)
+  
+  # Calculate naive errors using direct indexing for lag
+  naive_forecast <- c(NA, actual_values_org[1:(length(actual_values_org) - 1)]) # Shift the series by one
+  naive_errors <- actual_values_org - naive_forecast
+  naive_forecast_error <- mean(abs(naive_errors), na.rm = TRUE) # For MASE
+  naive_forecast_squared_error <- mean(naive_errors^2, na.rm = TRUE) # For RMSSE
+  
+  # Calculate MASE and RMSSE
+  MASE <- mean_abs_error / naive_forecast_error
+  RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error) # This is a hypothesized version of RMSSE based on MASE's concept
+  
+  return(list(MASE = MASE, RMSSE = RMSSE))
+}
+
+
+# Specify models and organisations
+models <- c("naive_model", "ets_model", "tscount", "comb")
+organisations <- unique(training_data$Aggregated_Organisation)
+
+# Nested lapply to iterate over models and organisations
+results_list <- lapply(models, function(model) {
+  model_results <- lapply(organisations, function(org) {
+    calc_scaled_errors_for_model_organisation(model, org)
+  })
+  
+  # Name each element in the list for clarity
+  names(model_results) <- organisations
+  
+  # Include the model name in the results
+  return(list(
+    model = model,
+    results = model_results
+  ))
+})
+
+# Set names for the list based on model names for clarity
+names(results_list) <- models
+
+```
+
+
+
+
+```{r}
+# Define safe_extract function
+safe_extract <- function(x, field) {
+  if (is.list(x) && !is.null(x[[field]])) {
+    return(x[[field]])
+  } else {
+    return(NA)
+  }
+}
+
+# Convert the results list to a data frame
+results_df <- map_df(results_list, ~{
+  if (is.list(.x$results)) {
+    map_df(.x$results, ~{
+      tibble(
+        organisation = names(.x), 
+        MASE = safe_extract(.x, "MASE"), 
+        RMSSE = safe_extract(.x, "RMSSE")
+      )
+    }, .id = "model") 
+  } else {
+    return(tibble(organisation = NA, MASE = NA, RMSSE = NA, model = NA))
+  }
+}, .id = "model_name") 
+
+# Selecting relevant columns
+results_df <- results_df %>%
+  select(model_name, model, organisation, MASE, RMSSE) %>%
+  filter(model == "<aggregated>")
+
+# Print the results
+print(results_df)
+
+```
+
+### tscount seems to be performing worse than the naive model, therefore, I would like to remove that from the models included.
+
+
+## Remove tscount
+```{r}
+fit_cv_no_tscount<- training_data %>%
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance)
+  )|> mutate (comb = (naive_model+ets_model)/2) 
+
+```
+
+
+
+```{r}
+# Generate forecasts
+fc_cv_no_tscount <- fit_cv_no_tscount %>%
+  forecast(h = 12) 
+
+```
+
+
+
+
+```{r}
+
+# Function to calculate MASE and RMSSE for a single model
+calc_scaled_errors_for_model_organisation <- function(model_name, organisation) {
+ # Get forecasted and actual values for specific model and organisation
+  fc_single_model_no_tscount <- fit_cv_no_tscount %>%
+    forecast(h = 12) %>%
+    filter(.model == model_name, Aggregated_Organisation == organisation)
+  
+  forecasted_values_no_tscount <- fc_single_model_no_tscount$.mean
+  
+  actual_values_org <- test_data %>%
+    filter(Aggregated_Organisation == organisation) %>%
+    pull(attendance)
+  
+  # Calculate errors
+  errors <- actual_values_org - forecasted_values_no_tscount
+  mean_abs_error <- mean(abs(errors), na.rm = TRUE)
+  mean_squared_error <- mean(errors^2, na.rm = TRUE)
+  
+  # Calculate naive errors using direct indexing for lag
+  naive_forecast <- c(NA, actual_values_org[1:(length(actual_values_org) - 1)]) # Shift the series by one
+  naive_errors <- actual_values_org - naive_forecast
+  naive_forecast_error <- mean(abs(naive_errors), na.rm = TRUE) # For MASE
+  naive_forecast_squared_error <- mean(naive_errors^2, na.rm = TRUE) # For RMSSE
+  
+  # Calculate MASE and RMSSE
+  MASE <- mean_abs_error / naive_forecast_error
+  RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error) # This is a hypothesized version of RMSSE based on MASE's concept
+  
+  return(list(MASE = MASE, RMSSE = RMSSE))
+}
+
+
+# Specify models and organisations
+models <- c("naive_model", "ets_model", "tscount", "comb")
+organisations <- unique(training_data$Aggregated_Organisation)
+
+# Nested lapply to iterate over models and organisations
+results_list <- lapply(models, function(model) {
+  model_results <- lapply(organisations, function(org) {
+    calc_scaled_errors_for_model_organisation(model, org)
+  })
+  
+  # Name each element in the list for clarity
+  names(model_results) <- organisations
+  
+  # Include the model name in the results
+  return(list(
+    model = model,
+    results = model_results
+  ))
+})
+
+# Set names for the list based on model names for clarity
+names(results_list) <- models
+
+```
+
+
+
+```{r}
+# Convert the results list to a data frame
+results_df <- map_df(results_list, ~{
+  if (is.list(.x$results)) {
+    map_df(.x$results, ~{
+      tibble(
+        organisation = names(.x), 
+        MASE = safe_extract(.x, "MASE"), 
+        RMSSE = safe_extract(.x, "RMSSE")
+      )
+    }, .id = "model") 
+  } else {
+    return(tibble(organisation = NA, MASE = NA, RMSSE = NA, model = NA))
+  }
+}, .id = "model_name") 
+
+# Selecting relevant columns
+results_df <- results_df %>%
+  select(model_name, model, organisation, MASE, RMSSE) %>%
+  filter(model == "<aggregated>")
+
+# Print the results
+print(results_df)
+
+```
+
+
+```{r no_tscount}
+joined_data_no_tscount <- as_tibble(test_data) %>%
+  left_join(as_tibble(fc_cv_no_tscount), by = c("YearMonth", "Aggregated_Organisation")) %>%
+  select(-attendance.y) %>%
+  rename(attendance = attendance.x) %>%
+  rename(forecast = .mean)
+```
+
+
+
 
 joined_data <- as_tibble(test_data) %>%
   left_join(as_tibble(fc_cv), by = c("YearMonth", "Aggregated_Organisation")) %>%
@@ -761,22 +1000,7 @@ joined_data <- as_tibble(test_data) %>%
   rename(attendance = attendance.x) %>%
   rename(forecast = .mean)
 
-```
 
-
-```{r}
-
-comparison_data <- data.frame(
-  Month = yearmonth(test_data$YearMonth),
-  Actual = test_data$attendance,
-  Forecasted = fc_cv$.mean,
-  Aggregated_Organisation = test_data$Aggregated_Organisation  
-) %>%rowwise()
-
-```
-
-
-```{r fig.height=4}
 
 joined_data_long<- joined_data %>%
   pivot_longer(
@@ -800,9 +1024,6 @@ plot_list <- map(unique_organisations, ~{
 print(plot_list)
 
 
-```
-
-```{r thinking_if_should_disregard_the_t_test}
 # Running t-tests and extracting p-value and t-value
 t_test_summary <- joined_data %>%
   summarise(
@@ -813,7 +1034,7 @@ t_test_summary <- joined_data %>%
 
 print(t_test_summary)
 
-```
+
 The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significantly different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
 
 
@@ -829,7 +1050,7 @@ The p value is relatively high. It suggests that we fail to reject the null hypo
 
 ## Reconcile
 
-### 1. Fitting models and Forecasting
+### 1. Fitting models and Forecasting without tscount
 
 
 
@@ -838,8 +1059,7 @@ fit_wales <- data_wales |>
   model(
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
+  )|> mutate (comb = (naive_model+ets_model)/2)
 ```
   
 ```{r}
@@ -910,6 +1130,8 @@ data_full <- data_grouped_age |>
 
 filter_date <- yearmonth("2022 Jun")
 
+data_full <- data_full %>%
+  fill_gaps(.full = TRUE)
 ```
 
 
@@ -919,17 +1141,40 @@ fit_age <- data_full %>%
   filter(yearmonth(YearMonth) <= filter_date) %>%
   model(
 naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
+    ets_model = ETS(attendance)
+  )|> mutate (comb = (naive_model+ets_model)/2)
+```
+```{r}
+
+
+# Remove groups with all NAs
+data_full_no_all_na <- data_full %>%
+  group_by(Aggregated_Organisation, Hospital_ItemName_ENG, Grouped_Age) %>%
+  filter(!all(is.na(attendance))) %>%
+  ungroup()
+
+# For illustration, we're using na.locf from zoo to fill NA values (Last Observation Carried Forward).
+# Depending on the nature of your data, you might need a different imputation method.
+library(zoo)
+data_full_no_na <- data_full_no_all_na %>%
+  mutate(attendance = na.locf(attendance, na.rm = FALSE))
+
+# Try fitting the models again
+fit_age <- data_full_no_na %>%
+  filter(yearmonth(YearMonth) <= filter_date) %>%
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance)
+  ) %>%
+  mutate(comb = (naive_model + ets_model) / 2)
+
 ```
 
-
 ```{r}
-# The reconciliation didn't work
 fc_age <- fit_age %>%
   select("comb") %>%
-  reconcile(bu = bottom_up(comb)) %>%
+  reconcile(bu = bottom_up(comb),
+            ols = min_trace(comb, method = "ols")) %>%
   forecast(h=18)
 ```
 
@@ -948,6 +1193,7 @@ fc_age %>%
         axis.text.y = element_text(angle = 0, hjust = 1))
 
 ```
+
 
 
 
