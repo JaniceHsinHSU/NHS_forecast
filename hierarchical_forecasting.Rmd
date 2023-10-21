@@ -692,16 +692,17 @@ data_wales <- data_grouped_age |>
 
 
 ## Time series cross validation
-
+## stretch_tsibble(.init = 135-36, .step = 1)
 
 ```{r}
+#hts
 library(tscount)
 # Split data
-training_data <- data_wales %>% 
-  filter(YearMonth <= yearmonth("2022 Jun"))
+training_data <- data_hts %>% 
+  filter(YearMonth <= yearmonth("2020 Jun"))
 
-test_data <- data_wales %>% 
-  filter(YearMonth > yearmonth("2022 Jun")) 
+test_data <- data_hts %>% 
+  filter(YearMonth > yearmonth("2020 Jun")) 
 
 test_data_filtered <- test_data %>%
   filter(Aggregated_Organisation == "<aggregated>")
@@ -716,7 +717,7 @@ fit_cv<- training_data %>%
   model(
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
   )|> mutate (comb = (naive_model+ets_model+tscount)/3) 
 ```
 
@@ -725,7 +726,7 @@ fit_cv<- training_data %>%
 ```{r}
 # Generate forecasts
 fc_cv <- fit_cv %>%
-  forecast(h = 12) %>%
+  forecast(h = 36) %>%
   filter(.model == "comb") 
 
 ```
@@ -734,7 +735,7 @@ fc_cv <- fit_cv %>%
 ```{r}
 # Generate forecasts for aggregated
 fc_cv_filtered <- fit_cv %>%
-  forecast(h = 12) %>%
+  forecast(h = 36) %>%
   filter(.model == "comb") %>%
   filter(Aggregated_Organisation == "<aggregated>")
 ```
@@ -888,7 +889,7 @@ fit_cv_no_tscount<- training_data %>%
 ```{r}
 # Generate forecasts
 fc_cv_no_tscount <- fit_cv_no_tscount %>%
-  forecast(h = 12) 
+  forecast(h = 36) 
 
 ```
 
