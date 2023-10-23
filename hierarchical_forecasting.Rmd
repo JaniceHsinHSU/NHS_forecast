@@ -676,18 +676,63 @@ Impact of a unit error is not constant across levels; for instance, a 100-unit e
 
 ```{r}
 # hierarchy with age group
-data_hts <- data_grouped_age |>
-  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
+data_gts <- data_grouped_age |>
+  aggregate_key((Aggregated_Organisation / Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
 ```
-
 
 
 ```{r}
-# hierarchy without age group, only aggregate with the organisation, wales as a big picture
-data_wales <- data_grouped_age |>
-  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
+data_gts <- data_gts %>%
+  as_tsibble(key = c("Aggregated_Organisation", "Grouped_Age", "Hospital_ItemName_ENG"), index = "YearMonth")
+
+
 ```
 
+
+```{r}
+library(dplyr)
+
+# Define the expected number of rows for the entire time series
+expected_length <- nrow(unique(data_gts[,"YearMonth"]))
+
+cleaned_data <- data_gts %>%
+  group_by(Aggregated_Organisation, Grouped_Age, Hospital_ItemName_ENG) %>%
+  filter(n() == expected_length) %>%
+  ungroup()
+
+```
+
+```{r}
+library(fable.tscount)
+fit_gts <- cleaned_data %>%
+ model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3)  %>%
+  reconcile(
+    bu = bottom_up(comb),
+    ols = min_trace(comb, method = "ols"),
+    mint = min_trace(comb, method = "mint_shrink")
+  )
+```
+
+```{r}
+fc_gts <- fit_gts %>%
+  forecast(h = 6)
+
+```
+
+```{r}
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data,
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")
+```
 
 
 
@@ -695,13 +740,13 @@ data_wales <- data_grouped_age |>
 ## stretch_tsibble(.init = 135-36, .step = 1)
 
 ```{r}
-#hts
+library(fable.tscount)
 library(tscount)
 # Split data
-training_data <- data_hts %>% 
+training_data <- cleaned_data %>% 
   filter(YearMonth <= yearmonth("2020 Jun"))
 
-test_data <- data_hts %>% 
+test_data <- cleaned_data %>% 
   filter(YearMonth > yearmonth("2020 Jun")) 
 
 test_data_filtered <- test_data %>%
@@ -709,78 +754,50 @@ test_data_filtered <- test_data %>%
 
 ```
 
+135-36-24
+```{r}
+data_gts_tr <- cleaned_data |>
+  stretch_tsibble(.init = 99, .step = 1) 
+
+
+```
+data_gts_tr |>
+  model(base = ETS(attendance)) |>
+  forecast(h = 36) 
+
 
 ```{r}
-# average the three models
-library(fable.tscount)
-fit_cv<- training_data %>%
+filtered_data <- data_gts %>%
+  filter(Aggregated_Organisation == "<aggregated>")
+```
+
+
+data_gts_fc <- data_gts_tr |>
+  model(naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))) |>
+  forecast(h = 36) 
+
+
+# TSCV accuracy
+tscv_model <- data_gts_tr |>
   model(
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
     tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
   )|> mutate (comb = (naive_model+ets_model+tscount)/3) 
-```
 
 
 
-```{r}
-# Generate forecasts
-fc_cv <- fit_cv %>%
-  forecast(h = 36) %>%
-  filter(.model == "comb") 
-
-```
-
-
-```{r}
-# Generate forecasts for aggregated
-fc_cv_filtered <- fit_cv %>%
-  forecast(h = 36) %>%
-  filter(.model == "comb") %>%
-  filter(Aggregated_Organisation == "<aggregated>")
-```
-
-
-```{r accuracy_needs_to_be_updated}
-# Check the accuracy
-forecasted_values <- fc_cv_filtered$.mean
-actual_values <- test_data_filtered$attendance
-actual_values <- as.numeric(actual_values)
-
-actual_values_models <- test_data$attendance
-
-```
-
-```{r not_sure_if_it_should_be_calc_like_this1}
-
-errors <- actual_values - forecasted_values
-mean_abs_error <- mean(abs(errors), na.rm = TRUE)
-naive_forecast_error <- mean(abs(diff(actual_values)), na.rm = TRUE)
-
-MASE <- mean_abs_error / naive_forecast_error
-print(MASE)
-
-```
-
-
-```{r not_sure_if_it_should_be_calc_like_this2}
-mean_squared_error <- mean(errors^2, na.rm = TRUE)
-naive_forecast_squared_error <- mean(diff(actual_values)^2, na.rm = TRUE)
-
-RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error)
-print(RMSSE)
-
-```
 
 
 
-```{r}
 
 # Function to calculate MASE and RMSSE for a single model
 calc_scaled_errors_for_model_organisation <- function(model_name, organisation) {
  # Get forecasted and actual values for specific model and organisation
-  fc_single_model_org <- fit_cv %>%
-    forecast(h = 12) %>%
+  fc_single_model_org <- tscv_model %>%
+    forecast(h = 36) %>%
     filter(.model == model_name, Aggregated_Organisation == organisation)
   
   forecasted_values_single <- fc_single_model_org$.mean
@@ -831,12 +848,11 @@ results_list <- lapply(models, function(model) {
 # Set names for the list based on model names for clarity
 names(results_list) <- models
 
-```
 
 
 
 
-```{r}
+
 # Define safe_extract function
 safe_extract <- function(x, field) {
   if (is.list(x) && !is.null(x[[field]])) {
@@ -869,174 +885,12 @@ results_df <- results_df %>%
 # Print the results
 print(results_df)
 
-```
-
-### tscount seems to be performing worse than the naive model, therefore, I would like to remove that from the models included.
-
-
-## Remove tscount
-```{r}
-fit_cv_no_tscount<- training_data %>%
-  model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance)
-  )|> mutate (comb = (naive_model+ets_model)/2) 
-
-```
-
-
-
-```{r}
-# Generate forecasts
-fc_cv_no_tscount <- fit_cv_no_tscount %>%
-  forecast(h = 36) 
-
-```
 
 
 
 
-```{r}
-
-# Function to calculate MASE and RMSSE for a single model
-calc_scaled_errors_for_model_organisation <- function(model_name, organisation) {
- # Get forecasted and actual values for specific model and organisation
-  fc_single_model_no_tscount <- fit_cv_no_tscount %>%
-    forecast(h = 12) %>%
-    filter(.model == model_name, Aggregated_Organisation == organisation)
-  
-  forecasted_values_no_tscount <- fc_single_model_no_tscount$.mean
-  
-  actual_values_org <- test_data %>%
-    filter(Aggregated_Organisation == organisation) %>%
-    pull(attendance)
-  
-  # Calculate errors
-  errors <- actual_values_org - forecasted_values_no_tscount
-  mean_abs_error <- mean(abs(errors), na.rm = TRUE)
-  mean_squared_error <- mean(errors^2, na.rm = TRUE)
-  
-  # Calculate naive errors using direct indexing for lag
-  naive_forecast <- c(NA, actual_values_org[1:(length(actual_values_org) - 1)]) # Shift the series by one
-  naive_errors <- actual_values_org - naive_forecast
-  naive_forecast_error <- mean(abs(naive_errors), na.rm = TRUE) # For MASE
-  naive_forecast_squared_error <- mean(naive_errors^2, na.rm = TRUE) # For RMSSE
-  
-  # Calculate MASE and RMSSE
-  MASE <- mean_abs_error / naive_forecast_error
-  RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error) # This is a hypothesized version of RMSSE based on MASE's concept
-  
-  return(list(MASE = MASE, RMSSE = RMSSE))
-}
 
 
-# Specify models and organisations
-models <- c("naive_model", "ets_model", "tscount", "comb")
-organisations <- unique(training_data$Aggregated_Organisation)
-
-# Nested lapply to iterate over models and organisations
-results_list <- lapply(models, function(model) {
-  model_results <- lapply(organisations, function(org) {
-    calc_scaled_errors_for_model_organisation(model, org)
-  })
-  
-  # Name each element in the list for clarity
-  names(model_results) <- organisations
-  
-  # Include the model name in the results
-  return(list(
-    model = model,
-    results = model_results
-  ))
-})
-
-# Set names for the list based on model names for clarity
-names(results_list) <- models
-
-```
-
-
-
-```{r}
-# Convert the results list to a data frame
-results_df <- map_df(results_list, ~{
-  if (is.list(.x$results)) {
-    map_df(.x$results, ~{
-      tibble(
-        organisation = names(.x), 
-        MASE = safe_extract(.x, "MASE"), 
-        RMSSE = safe_extract(.x, "RMSSE")
-      )
-    }, .id = "model") 
-  } else {
-    return(tibble(organisation = NA, MASE = NA, RMSSE = NA, model = NA))
-  }
-}, .id = "model_name") 
-
-# Selecting relevant columns
-results_df <- results_df %>%
-  select(model_name, model, organisation, MASE, RMSSE) %>%
-  filter(model == "<aggregated>")
-
-# Print the results
-print(results_df)
-
-```
-
-
-```{r no_tscount}
-joined_data_no_tscount <- as_tibble(test_data) %>%
-  left_join(as_tibble(fc_cv_no_tscount), by = c("YearMonth", "Aggregated_Organisation")) %>%
-  select(-attendance.y) %>%
-  rename(attendance = attendance.x) %>%
-  rename(forecast = .mean)
-```
-
-
-
-
-joined_data <- as_tibble(test_data) %>%
-  left_join(as_tibble(fc_cv), by = c("YearMonth", "Aggregated_Organisation")) %>%
-  select(-attendance.y) %>%
-  rename(attendance = attendance.x) %>%
-  rename(forecast = .mean)
-
-
-
-joined_data_long<- joined_data %>%
-  pivot_longer(
-    cols = c(attendance, forecast),
-    names_to = "Type",
-    values_to = "Value"
-  )
-
-
-
-unique_organisations <- unique(joined_data_long$Aggregated_Organisation)
-
-plot_list <- map(unique_organisations, ~{
-  ggplot(joined_data_long[joined_data_long$Aggregated_Organisation == .x,], 
-         aes(x = YearMonth, y = Value, color = Type)) +
-    geom_line() +
-    labs(title = paste("Forecasted vs Actual Values for", .x),
-         y = "Values") +
-    theme_minimal()
-})
-print(plot_list)
-
-
-# Running t-tests and extracting p-value and t-value
-t_test_summary <- joined_data %>%
-  summarise(
-    t_value = list(t.test(attendance, forecast)$statistic),
-    p_value = list(t.test(attendance, forecast)$p.value)
-  ) %>%
-  unnest(cols = c(t_value, p_value))
-
-print(t_test_summary)
-
-
-The p value is relatively high. It suggests that we fail to reject the null hypothesis, meaning there is no enough evidence to conclude that forecast and actual values are significantly different. In other words, the t-value of 0.313 is not large enough to be considered statistically significant.
 
 
 
@@ -1044,158 +898,6 @@ The p value is relatively high. It suggests that we fail to reject the null hypo
 - Base Forecasting: This technique is used to forecast straightforward time series data. Using statistical or machine learning models to extrapolate future data points based on observed past data is the main focus of this technique. Base forecasting, which is frequently applied when dealing with a single time series, tries to find patterns, trends, and seasonality in the historical data in order to produce precise and trustworthy future projections.
 
 - Reconciliation Forecasting (Hierarchical Forecasting): Reconciliation or Hierarchical forecasting is typically used when managing hierarchical or grouped time series data. It involves generating forecasts on several levels of aggregation. This process not only creates projections for each individual time series, but also reconciles the forecasts to guarantee consistency throughout the hierarchy's many levels. The forecasts may be distributed across hierarchical levels using a variety of strategies, such as top-down, bottom-up, to make sure that the projections at each level coincide with their corresponding aggregate levels. When the data contains a hierarchical structure, such as organisational, product, or geographic hierarchies, hierarchical forecasting is especially advantageous since it ensures consistent and consolidated projections at all levels.
-
-
-
-
-
-## Reconcile
-
-### 1. Fitting models and Forecasting without tscount
-
-
-
-```{r}
-fit_wales <- data_wales |>
-  model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-  )|> mutate (comb = (naive_model+ets_model)/2)
-```
-  
-```{r}
-wales_rc <- fit_wales %>%
-   reconcile(bu = bottom_up(comb),
-            wls_ETS1 = min_trace(comb, method = "wls_struct"),
-            wls_ETS2 = min_trace(comb, method = "wls_var"),
-            mint_ETS = min_trace(comb, method = "mint_shrink")) %>%
-  forecast(h = 6)
-```
-
-
-```{r}
-forecast_wales_avg <- wales_rc %>%
-  as_tibble() %>%
-  group_by(Aggregated_Organisation, YearMonth) %>%
-  summarise(mean_attendance = mean(.mean, na.rm = TRUE), .groups = "drop")
-
-```
-
-```{r}
-forecast_wales_avg <- forecast_wales_avg %>%
-  rename(attendance = mean_attendance)
-```
-
-```{r}
-data_wales$Aggregated_Organisation <- as.factor(data_wales$Aggregated_Organisation)
-data2_hts$Aggregated_Organisation <- as.factor(data2_hts$Aggregated_Organisation)
-forecast_wales_avg$Aggregated_Organisation <- as.factor(forecast_wales_avg$Aggregated_Organisation)
-
-combined_data_rc <- bind_rows(data_wales, data2_hts, forecast_wales_avg)
-
-```
-
-
-
-
-```{r}
-
-combined_data_rc <- combined_data_rc %>%
-  mutate(data_type = if_else(YearMonth < ymd("2023-06-01"), "Historical", "Forecast"))
-
-
-# Plotting
-ggplot(combined_data_rc, aes(x = YearMonth, y = attendance, color = data_type)) +
-  geom_line() +
-  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
-  theme_minimal() +
-  labs(title = "Attendance Over Time",
-       subtitle = "Distinguishing between historical and forecasted data",
-       x = "Year and Month",
-       y = "Attendance",
-       color = "Data Type") +
-  scale_color_manual(values = c("Historical" = "blue", "Forecast" = "red"))
-
-```
-
-
-
-
-## Include Age Group
-
-
-
-```{r}
-data_full <- data_grouped_age |>
-  aggregate_key((Aggregated_Organisation/Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
-
-filter_date <- yearmonth("2022 Jun")
-
-data_full <- data_full %>%
-  fill_gaps(.full = TRUE)
-```
-
-
-
-```{r}
-fit_age <- data_full %>%
-  filter(yearmonth(YearMonth) <= filter_date) %>%
-  model(
-naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance)
-  )|> mutate (comb = (naive_model+ets_model)/2)
-```
-```{r}
-
-
-# Remove groups with all NAs
-data_full_no_all_na <- data_full %>%
-  group_by(Aggregated_Organisation, Hospital_ItemName_ENG, Grouped_Age) %>%
-  filter(!all(is.na(attendance))) %>%
-  ungroup()
-
-# For illustration, we're using na.locf from zoo to fill NA values (Last Observation Carried Forward).
-# Depending on the nature of your data, you might need a different imputation method.
-library(zoo)
-data_full_no_na <- data_full_no_all_na %>%
-  mutate(attendance = na.locf(attendance, na.rm = FALSE))
-
-# Try fitting the models again
-fit_age <- data_full_no_na %>%
-  filter(yearmonth(YearMonth) <= filter_date) %>%
-  model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance)
-  ) %>%
-  mutate(comb = (naive_model + ets_model) / 2)
-
-```
-
-```{r}
-fc_age <- fit_age %>%
-  select("comb") %>%
-  reconcile(bu = bottom_up(comb),
-            ols = min_trace(comb, method = "ols")) %>%
-  forecast(h=18)
-```
-
-
-```{r}
-
-# Filter the forecast results for aggregated levels and plot
-fc_age %>%
-  filter(is_aggregated(Aggregated_Organisation), !is_aggregated(Grouped_Age)) %>%
-  autoplot(
-    data_full %>% filter(yearmonth(YearMonth) >= yearmonth("2020 Jan")),level = NULL
-  ) +
-  labs(y = "Attendance ('000)") +
-  facet_wrap(vars(Grouped_Age), scales = "free_y") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text.y = element_text(angle = 0, hjust = 1))
-
-```
-
-
 
 
 
@@ -1240,4 +942,5 @@ plot(graph,
      layout = layout.reingold.tilford(graph, root = 1))
 
 ```
+
 
