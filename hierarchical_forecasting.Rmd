@@ -731,7 +731,19 @@ fc_gts |>
     level = NULL
   ) +
   labs(y = "attendance") +
-  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data %>% filter(YearMonth >= yearmonth("2022 Jan")),
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
@@ -744,148 +756,118 @@ library(fable.tscount)
 library(tscount)
 # Split data
 training_data <- cleaned_data %>% 
-  filter(YearMonth <= yearmonth("2020 Jun"))
+  filter(YearMonth <= yearmonth("2022 Jun"))
 
 test_data <- cleaned_data %>% 
-  filter(YearMonth > yearmonth("2020 Jun")) 
+  filter(YearMonth > yearmonth("2022 Jun")) 
 
 test_data_filtered <- test_data %>%
   filter(Aggregated_Organisation == "<aggregated>")
 
 ```
 
-135-36-24
+```{r}
+library(tsibble)
+
+start_date <- min(training_data$YearMonth)
+end_date <- max(training_data$YearMonth)
+
+# Calculate the difference in months using yearmonth
+number_of_months <- as.integer(yearmonth(end_date) - yearmonth(start_date)) + 1
+
+number_of_months
+
+```
+
+135-12-12
 ```{r}
 data_gts_tr <- cleaned_data |>
-  stretch_tsibble(.init = 99, .step = 1) 
+  stretch_tsibble(.init = 123, .step = 1) 
 
 
 ```
-data_gts_tr |>
-  model(base = ETS(attendance)) |>
-  forecast(h = 36) 
 
 
 ```{r}
-filtered_data <- data_gts %>%
+filtered_tr <- data_gts_tr %>%
   filter(Aggregated_Organisation == "<aggregated>")
 ```
 
 
-data_gts_fc <- data_gts_tr |>
-  model(naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))) |>
-  forecast(h = 36) 
-
-
-# TSCV accuracy
-tscv_model <- data_gts_tr |>
+```{r}
+data_gts_fc <-filtered_tr |>
   model(
     naive_model = NAIVE(attendance),
     ets_model = ETS(attendance),
     tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3) 
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3) %>%
+  forecast(h = 12) 
+```
 
 
 
 
+```{r}
 
 
+merged_data <- left_join(as_tibble(data_gts_fc), as_tibble(test_data_filtered), by = c("YearMonth", "Aggregated_Organisation","Grouped_Age", "Hospital_ItemName_ENG"))
 
-# Function to calculate MASE and RMSSE for a single model
-calc_scaled_errors_for_model_organisation <- function(model_name, organisation) {
- # Get forecasted and actual values for specific model and organisation
-  fc_single_model_org <- tscv_model %>%
-    forecast(h = 36) %>%
-    filter(.model == model_name, Aggregated_Organisation == organisation)
+# Create an empty list to store results
+results_list <- list()
+
+# List of models
+model_names <- unique(merged_data$.model)
+
+# List of training datasets (using .id)
+training_ids <- unique(merged_data$.id)
+
+# Nested loop: first loop through models, then loop through training datasets
+for (model in model_names) {
+  results_list[[model]] <- list()  # Initialize a nested list for each model
   
-  forecasted_values_single <- fc_single_model_org$.mean
-  
-  actual_values_org <- test_data %>%
-    filter(Aggregated_Organisation == organisation) %>%
-    pull(attendance)
-  
-  # Calculate errors
-  errors <- actual_values_org - forecasted_values_single
-  mean_abs_error <- mean(abs(errors), na.rm = TRUE)
-  mean_squared_error <- mean(errors^2, na.rm = TRUE)
-  
-  # Calculate naive errors using direct indexing for lag
-  naive_forecast <- c(NA, actual_values_org[1:(length(actual_values_org) - 1)]) # Shift the series by one
-  naive_errors <- actual_values_org - naive_forecast
-  naive_forecast_error <- mean(abs(naive_errors), na.rm = TRUE) # For MASE
-  naive_forecast_squared_error <- mean(naive_errors^2, na.rm = TRUE) # For RMSSE
-  
-  # Calculate MASE and RMSSE
-  MASE <- mean_abs_error / naive_forecast_error
-  RMSSE <- sqrt(mean_squared_error / naive_forecast_squared_error) # This is a hypothesized version of RMSSE based on MASE's concept
-  
-  return(list(MASE = MASE, RMSSE = RMSSE))
-}
-
-
-# Specify models and organisations
-models <- c("naive_model", "ets_model", "tscount", "comb")
-organisations <- unique(training_data$Aggregated_Organisation)
-
-# Nested lapply to iterate over models and organisations
-results_list <- lapply(models, function(model) {
-  model_results <- lapply(organisations, function(org) {
-    calc_scaled_errors_for_model_organisation(model, org)
-  })
-  
-  # Name each element in the list for clarity
-  names(model_results) <- organisations
-  
-  # Include the model name in the results
-  return(list(
-    model = model,
-    results = model_results
-  ))
-})
-
-# Set names for the list based on model names for clarity
-names(results_list) <- models
-
-
-
-
-
-
-# Define safe_extract function
-safe_extract <- function(x, field) {
-  if (is.list(x) && !is.null(x[[field]])) {
-    return(x[[field]])
-  } else {
-    return(NA)
+  for (id in training_ids) {
+    # Filter the data for the current model and training dataset
+    subset_data <- merged_data %>% filter(.model == model & .id == id)
+    
+    # Calculate MASE and RMSSE
+    mase_val <- mean(abs((subset_data$attendance.y - subset_data$.mean) / 
+                         (subset_data$attendance.y - lag(subset_data$attendance.y))), na.rm = TRUE)
+    rmsse_val <- sqrt(mean((subset_data$attendance.y - subset_data$.mean)^2, na.rm = TRUE))
+    
+    # Store results in the nested list
+    results_list[[model]][[as.character(id)]] <- list(MASE = mase_val, RMSSE = rmsse_val)
   }
 }
 
-# Convert the results list to a data frame
-results_df <- map_df(results_list, ~{
-  if (is.list(.x$results)) {
-    map_df(.x$results, ~{
-      tibble(
-        organisation = names(.x), 
-        MASE = safe_extract(.x, "MASE"), 
-        RMSSE = safe_extract(.x, "RMSSE")
-      )
-    }, .id = "model") 
-  } else {
-    return(tibble(organisation = NA, MASE = NA, RMSSE = NA, model = NA))
-  }
-}, .id = "model_name") 
+# List to store averaged results
+averaged_results <- list()
 
-# Selecting relevant columns
-results_df <- results_df %>%
-  select(model_name, model, organisation, MASE, RMSSE) %>%
-  filter(model == "<aggregated>")
+for (model in model_names) {
+  # Extract the list of results for the current model
+  model_results <- results_list[[model]]
+  
+  # Calculate the average MASE and RMSSE over the 13 training datasets while removing NA values
+  avg_mase <- mean(sapply(model_results, function(x) x$MASE), na.rm = TRUE)
+  avg_rmsse <- mean(sapply(model_results, function(x) x$RMSSE), na.rm = TRUE)
+  
+  # Store the averaged results
+  averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
+}
 
-# Print the results
-print(results_df)
+# ... [previous code remains unchanged]
+
+# Convert averaged_results to a dataframe
+averaged_df <- data.frame(model = names(averaged_results))
+
+# Extract Avg_MASE and Avg_RMSSE values for each model
+averaged_df$Avg_MASE <- sapply(averaged_results, function(x) x$Avg_MASE)
+averaged_df$Avg_RMSSE <- sapply(averaged_results, function(x) x$Avg_RMSSE)
+
+print(averaged_df)
 
 
+
+```
 
 
 
