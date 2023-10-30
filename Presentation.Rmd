@@ -580,7 +580,7 @@ for (col in cols_to_forecast) {
 ```
 
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=FALSE, warning=FALSE, out.height= '50%'}
 TableAccuracyMetrics <-
   rbind(
     # aggregate ARIMA accuracy metrics
@@ -648,17 +648,26 @@ data_grouped_age <- data_grouped %>%
 ```
 
 
-```{r}
-# hierarchy with age group
-data_hts <- data_grouped_age |>
-  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+data_gts <- data_grouped_age |>
+  aggregate_key((Aggregated_Organisation / Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
 ```
 
+- Hierarchical structure:
 
-```{r}
-# hierarchy without age group, only aggregate with the organisation, wales as a big picture
-data_wales <- data_grouped_age |>
-  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
+Parent: Aggregated_Organisation
+
+Child: Hospital_ItemName_ENG
+
+Group: Grouped_Age
+
+aggregate_key: attendance
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+data_gts <- data_gts %>%
+  as_tsibble(key = c("Aggregated_Organisation", "Grouped_Age", "Hospital_ItemName_ENG"), index = "YearMonth")
+
+
 ```
 
 ---
@@ -666,158 +675,137 @@ data_wales <- data_grouped_age |>
 # Step 2: Time series cross validation
 
 ```{r echo=FALSE, warning=FALSE, include = FALSE}
+library(dplyr)
+
+# Define the expected number of rows for the entire time series
+expected_length <- nrow(unique(data_gts[,"YearMonth"]))
+# Obtain the data for the entire time series for the purpose of reconciliation
+cleaned_data <- data_gts %>%
+  group_by(Aggregated_Organisation, Grouped_Age, Hospital_ItemName_ENG) %>%
+  filter(n() == expected_length) %>%
+  ungroup()
+```
+
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+library(fable.tscount)
 library(tscount)
 # Split data
-training_data <- data_wales %>% 
+training_data <- cleaned_data %>% 
   filter(YearMonth <= yearmonth("2022 Jun"))
 
-test_data <- data_wales %>% 
+test_data <- cleaned_data %>% 
   filter(YearMonth > yearmonth("2022 Jun")) 
 
 test_data_filtered <- test_data %>%
   filter(Aggregated_Organisation == "<aggregated>")
 
-```
-
-
-```{r}
-# average the three models
-library(fable.tscount)
-fit_cv<- training_data %>%
-  model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
-```
-
-
-
-
-```{r echo=FALSE, warning=FALSE}
-# Generate forecasts
-fc_cv <- fit_cv %>%
-  forecast(h = 12) %>%
-  filter(.model == "comb") 
 
 ```
 
 
-```{r warning=FALSE}
-# Generate forecasts for aggregated
-fc_cv_filtered <- fit_cv %>%
-  forecast(h = 12) %>%
-  filter(.model == "comb") %>%
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+library(tsibble)
+
+start_date <- min(training_data$YearMonth)
+end_date <- max(training_data$YearMonth)
+
+# Calculate the difference in months using yearmonth
+number_of_months <- as.integer(yearmonth(end_date) - yearmonth(start_date)) + 1
+
+number_of_months
+```
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+data_gts_tr <- cleaned_data |>
+  stretch_tsibble(.init = 123, .step = 1) 
+```
+
+```{r echo=FALSE}
+knitr::include_graphics("tscv.png")
+```
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+filtered_tr <- data_gts_tr %>%
   filter(Aggregated_Organisation == "<aggregated>")
 ```
 
----
 
-# Check the accuracy
-
-```{r}
-
-forecasted_values <- fc_cv_filtered$.mean
-
-accuracy_value <- accuracy(
-  as.data.frame(forecasted_values),as.data.frame(test_data_filtered$attendance))
-
-print(accuracy_value)
-
-
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+data_gts_fc <-filtered_tr |>
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3) %>%
+  forecast(h = 12) 
 ```
 
+
 ---
+# Check accuracy
 
 ```{r echo=FALSE, warning=FALSE}
 
-joined_data <- as_tibble(test_data) %>%
-  left_join(as_tibble(fc_cv), by = c("YearMonth", "Aggregated_Organisation")) %>%
-  select(-attendance.y) %>%
-  rename(attendance = attendance.x) %>%
-  rename(forecast = .mean)
 
-```
+merged_data <- left_join(as_tibble(data_gts_fc), as_tibble(test_data_filtered), by = c("YearMonth", "Aggregated_Organisation","Grouped_Age", "Hospital_ItemName_ENG"))
+
+# Create an empty list to store results
+results_list <- list()
+
+# List of models
+model_names <- unique(merged_data$.model)
+
+# List of training datasets (using .id)
+training_ids <- unique(merged_data$.id)
+
+# Nested loop: first loop through models, then loop through training datasets
+for (model in model_names) {
+  results_list[[model]] <- list()  # Initialize a nested list for each model
+  
+  for (id in training_ids) {
+    # Filter the data for the current model and training dataset
+    subset_data <- merged_data %>% filter(.model == model & .id == id)
+    
+    # Calculate MASE and RMSSE
+    mase_val <- mean(abs((subset_data$attendance.y - subset_data$.mean) / 
+                         (subset_data$attendance.y - lag(subset_data$attendance.y))), na.rm = TRUE)
+    rmsse_val <- sqrt(mean((subset_data$attendance.y - subset_data$.mean)^2, na.rm = TRUE))
+    
+    # Store results in the nested list
+    results_list[[model]][[as.character(id)]] <- list(MASE = mase_val, RMSSE = rmsse_val)
+  }
+}
+
+# List to store averaged results
+averaged_results <- list()
+
+for (model in model_names) {
+  # Extract the list of results for the current model
+  model_results <- results_list[[model]]
+  
+  # Calculate the average MASE and RMSSE over the 13 training datasets while removing NA values
+  avg_mase <- mean(sapply(model_results, function(x) x$MASE), na.rm = TRUE)
+  avg_rmsse <- mean(sapply(model_results, function(x) x$RMSSE), na.rm = TRUE)
+  
+  # Store the averaged results
+  averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
+}
+
+# ... [previous code remains unchanged]
+
+# Convert averaged_results to a dataframe
+averaged_df <- data.frame(model = names(averaged_results))
+
+# Extract Avg_MASE and Avg_RMSSE values for each model
+averaged_df$Avg_MASE <- sapply(averaged_results, function(x) x$Avg_MASE)
+averaged_df$Avg_RMSSE <- sapply(averaged_results, function(x) x$Avg_RMSSE)
+
+print(averaged_df)
 
 
-```{r echo=FALSE, warning=FALSE}
 
-comparison_data <- data.frame(
-  Month = yearmonth(test_data$YearMonth),
-  Actual = test_data$attendance,
-  Forecasted = fc_cv$.mean,
-  Aggregated_Organisation = test_data$Aggregated_Organisation  
-) %>%rowwise()
-
-```
-
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-
-joined_data_long<- joined_data %>%
-  pivot_longer(
-    cols = c(attendance, forecast),
-    names_to = "Type",
-    values_to = "Value"
-  )
-
-
-
-unique_organisations <- unique(joined_data_long$Aggregated_Organisation)
-
-plot_list <- map(unique_organisations, ~{
-  ggplot(joined_data_long[joined_data_long$Aggregated_Organisation == .x,], 
-         aes(x = YearMonth, y = Value, color = Type)) +
-    geom_line() +
-    labs(title = paste("Forecasted vs Actual Values for", .x),
-         y = "Values") +
-    theme_minimal()
-})
-
-
-
-```
-
-
-
-# Step 3: Forecast based on the time series cross validation
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[1]]
-```
----
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[2]]
-```
-
----
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[3]]
-```
-
----
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[4]]
-```
-
----
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[5]]
-```
-
----
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[6]]
-```
-
----
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width='70%', out.height='70%', fig.align='center', class.output='center-plot'}
-plot_list[[7]]
 ```
 
 ---
@@ -825,85 +813,49 @@ plot_list[[7]]
 # Reconciliation
 
 
-```{r echo=FALSE, warning=FALSE}
-# 1. Fitting models and Forecasting
-fit_wales <- data_wales |>
-  model(
-    naive_model = NAIVE(attendance),
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+# remove naive_model, and use comb as the base model
+library(fable.tscount)
+fit_gts <- cleaned_data %>%
+ model(
     ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
+  )|> mutate (comb = (ets_model+tscount)/2)  %>%
+  reconcile(
+    bu = bottom_up(comb),
+    ols = min_trace(comb, method = "ols")
+  )
 ```
-  
-```{r echo=FALSE, warning=FALSE}
-wales_rc <- fit_wales %>%
-   reconcile(bu = bottom_up(comb),
-            wls_ETS1 = min_trace(comb, method = "wls_struct"),
-            wls_ETS2 = min_trace(comb, method = "wls_var"),
-            mint_ETS = min_trace(comb, method = "mint_shrink")) %>%
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+fc_gts <- fit_gts %>%
   forecast(h = 6)
-```
-
-
-
-```{r echo=FALSE, warning=FALSE}
-forecast_wales_avg <- wales_rc %>%
-  as_tibble() %>%
-  group_by(Aggregated_Organisation, YearMonth) %>%
-  summarise(mean_attendance = mean(.mean, na.rm = TRUE), .groups = "drop")
 
 ```
 
 ```{r echo=FALSE, warning=FALSE}
-
-forecast_wales_avg <- forecast_wales_avg %>%
-  rename(attendance = mean_attendance)
-
-```
-
-
-```{r echo=FALSE, warning=FALSE}
-data_wales$Aggregated_Organisation <- as.factor(data_wales$Aggregated_Organisation)
-data2_hts$Aggregated_Organisation <- as.factor(data2_hts$Aggregated_Organisation)
-forecast_wales_avg$Aggregated_Organisation <- as.factor(forecast_wales_avg$Aggregated_Organisation)
-
-combined_data_rc <- bind_rows(data_wales, data2_hts, forecast_wales_avg)
-
-```
-
-
-
-
-```{r echo=FALSE, warning=FALSE}
-
-combined_data_rc <- combined_data_rc %>%
-  mutate(data_type = if_else(YearMonth < ymd("2023-06-01"), "Historical", "Forecast"))
-
-
-# Plotting
-ggplot(combined_data_rc, aes(x = YearMonth, y = attendance, color = data_type)) +
-  geom_line() +
-  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
-  theme_minimal() +
-  labs(title = "Attendance Over Time",
-       subtitle = "Distinguishing between historical and forecasted data",
-       x = "Year and Month",
-       y = "Attendance",
-       color = "Data Type") +
-  scale_color_manual(values = c("Historical" = "blue", "Forecast" = "red"))
-
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data,
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 ---
 # A closer look:
-```{r echo = FALSE, warning=FALSE}
-forecast_wales_avg %>%
-  ggplot( aes(x = YearMonth, y = attendance)) +
-  geom_line() +
-  facet_wrap(~Aggregated_Organisation, scales = "free_y") +
-  theme_minimal() +
-  labs(title = "Attendance Over Time",
-       x = "Year and Month",
-       y = "Attendance")
+```{r echo=FALSE, warning=FALSE}
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data %>% filter(YearMonth >= yearmonth("2022 Jan")),
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 

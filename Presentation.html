@@ -4,7 +4,7 @@
     <title>Hierarchical Forecasting of Emergency Department Attendance</title>
     <meta charset="utf-8" />
     <meta name="author" content="Janice Hsu" />
-    <meta name="date" content="2023-10-17" />
+    <meta name="date" content="2023-10-29" />
     <script src="libs/header-attrs-2.25/header-attrs.js"></script>
     <link href="libs/remark-css-0.0.1/default.css" rel="stylesheet" />
     <link href="libs/remark-css-0.0.1/default-fonts.css" rel="stylesheet" />
@@ -26,7 +26,7 @@ class: center, middle, inverse, title-slide
 ### Monash University
 ]
 .date[
-### 2023-10-17
+### 2023-10-29
 ]
 
 ---
@@ -291,19 +291,18 @@ class: center, middle
 
 
 
-```r
-# hierarchy with age group
-data_hts &lt;- data_grouped_age |&gt;
-  aggregate_key(Aggregated_Organisation / Hospital_ItemName_ENG * Grouped_Age, attendance = sum(Data))
-```
+
+- Hierarchical structure:
+
+Parent: Aggregated_Organisation
+
+Child: Hospital_ItemName_ENG
+
+Group: Grouped_Age
+
+aggregate_key: attendance
 
 
-
-```r
-# hierarchy without age group, only aggregate with the organisation, wales as a big picture
-data_wales &lt;- data_grouped_age |&gt;
-  aggregate_key(Aggregated_Organisation, attendance = sum(Data))
-```
 
 ---
 
@@ -313,16 +312,6 @@ data_wales &lt;- data_grouped_age |&gt;
 
 
 
-```r
-# average the three models
-library(fable.tscount)
-fit_cv&lt;- training_data %&gt;%
-  model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() , link = "log", model = list(past_obs = 1:3))
-  )|&gt; mutate (comb = (naive_model+ets_model+tscount)/3)
-```
 
 
 
@@ -330,70 +319,25 @@ fit_cv&lt;- training_data %&gt;%
 
 
 
+&lt;img src="tscv.png" width="1947" /&gt;
 
-```r
-# Generate forecasts for aggregated
-fc_cv_filtered &lt;- fit_cv %&gt;%
-  forecast(h = 12) %&gt;%
-  filter(.model == "comb") %&gt;%
-  filter(Aggregated_Organisation == "&lt;aggregated&gt;")
-```
+
+
+
+
+
 
 ---
+# Check accuracy
 
-# Check the accuracy
-
-
-```r
-forecasted_values &lt;- fc_cv_filtered$.mean
-
-accuracy_value &lt;- accuracy(
-  as.data.frame(forecasted_values),as.data.frame(test_data_filtered$attendance))
-
-print(accuracy_value)
-```
 
 ```
-## [1] 0
+##         model  Avg_MASE Avg_RMSSE
+## 1 naive_model 10.817713  4747.813
+## 2   ets_model  7.960357  2873.544
+## 3     tscount  9.134870  4519.123
+## 4        comb  8.693122  3670.712
 ```
-
----
-
-
-
-
-
-
-
-
-
-
-
-# Step 3: Forecast based on the time series cross validation
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-41-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-42-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-43-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-44-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-45-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-46-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
-
----
-&lt;img src="Presentation_files/figure-html/unnamed-chunk-47-1.png" width="70%" height="70%" style="display: block; margin: auto;" /&gt;
 
 ---
 
@@ -401,25 +345,13 @@ print(accuracy_value)
 
 
 
-  
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-![](Presentation_files/figure-html/unnamed-chunk-53-1.png)&lt;!-- --&gt;
+![](Presentation_files/figure-html/unnamed-chunk-43-1.png)&lt;!-- --&gt;
 ---
 # A closer look:
-![](Presentation_files/figure-html/unnamed-chunk-54-1.png)&lt;!-- --&gt;
+![](Presentation_files/figure-html/unnamed-chunk-44-1.png)&lt;!-- --&gt;
 
 
 ---

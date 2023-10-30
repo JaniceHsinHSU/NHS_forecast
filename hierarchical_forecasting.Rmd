@@ -1,13 +1,12 @@
 ---
-title: "hierarchical_forecasting_report"
+title: 'Hierarchical Time Series Forecasting in the Emergency Departments of NHS Wales'
 author: "Janice Hsu"
-date: "2023-09-30"
+date: "2023-10-30"
 output:
   bookdown::pdf_document2:
     latex_engine: xelatex
 ---
-- Change the accuracy test (the one with 0)
-- probably remove the seasonal effect and see if there's a pattern or sth
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.pos = "H", out.extra = "")
@@ -20,9 +19,9 @@ options(tinytex.verbose = TRUE)
 
 \newpage
 
-# Preliminary Analysis
 
-```{r}
+
+```{r include = FALSE, echo = FALSE, message = FALSE, warning = FALSE}
 # Required Libraries
 library(zoo)
 library(ggplot2)
@@ -47,10 +46,62 @@ library(feasts)
 ```
 
 
-```{r}
+```{r include = FALSE, echo = FALSE, message = FALSE, warning = FALSE}
 data <- read.csv("HLTH0037_ts_cleaned.csv")
 ```
 
+# Abstract
+
+## Introduction:
+
+National Health Service (NHS) Wales employs several time series forecasting techniques. In order to support the processes for planning and decision-making, both strategically (at All Wales level) and operationally (at local health board level). However, using base forecasting to analyse individual time series and the aggregated level can cause inconsistencies. Therefore, hierarchical time series forecasting method is to be used in this study. 
+
+## Background:
+
+The COVID-19 outbreak created unexpected difficulties of the forecasting for the attendance of Emergency Department in NHS-Wales. Therefore, NHS-Wales is seeking a reliable and consistent forecasting model regardless of the shifting patterns of patients’ arrivals during the lockdowns and health policy changes. 
+
+## Goal:
+
+This project's main goal is to create a forecasting models for emergency departments that can consistently deliver outcomes at the individual hospital, each local health board, and national levels. The research will allow for a comparison of:
+
+1. Forecasting national time series and with local time series combined.
+2. Forecasting time series hierarchically.
+
+By doing this, I hope to create a system that synchronises policymakers' projections with operational forecasts, guaranteeing an efficient decision-making process.
+
+
+## Techniques:
+
+I will use NHS Wales publicly available data, with an emphasis on emergency departments. The information will be split up into the subsequent sections:
+
+1. National Level Data: This will include all of the information from Wales' emergency departments combined.
+2. Local Health Board Data: This will include distinct local health boards which operate individual hospitals.
+3. Individual Hospital Data: This will be divided according to distinct hospital.
+
+I'll use the following predicting techniques on the information:
+
+- The national data will be subjected to traditional time series forecasting.
+- Summed projections: To get at a nationwide total, individual projections for each hospital and local health boards will be made and then added together.
+- Hierarchical Time Series Forecasting: This method models the data in accordance with the underlying hierarchy in the data (national(Wales), local health boards, hospital).
+
+
+## Differences between base forecasting and hierarchical forecasting:
+
+- Base forecasting: It is used to forecast simple time series data with statistical or machine learning methods. To generate future data, base forecasting observes the historical data, and finds its pattern, trend and seasonality to produce future projections.
+
+
+- Reconciliation Forecasting (Hierarchical Forecasting): It is used when dealing with hierarchical or grouped time series data. Hierarchical forecasting involves generating forecast on different levels of aggregation. It doesn't only create projections for individual time series, but also reconciles the forecasts to guarantee consistency under multiple hierarchical levels. This method exploits a variety of strategies, such as top down, bottom up, to ensure that the individual projections align with their corresponding aggregated levels. This leads the hierarchical forecasting advantageous due to the fact that it can make sure the consistent and consolidated projections at all levels.
+
+
+## Anticipated Results:
+
+
+1. Determine the most reliable and accurate forecasting method for the attendance number for emergency departments in Wales.
+2. Provide evidence for why hierarchical time series methods are superior than other forecasting methods.
+3. Offer a scalable, transparent method that can be used by other NHS departments.
+
+
+\newpage
 
 ## Data Introduction
 
@@ -138,6 +189,27 @@ data_grouped <- data %>%
 ```{r}
 unique(data_grouped$Aggregated_Organisation)
 ```
+
+**What are Local Health Board?**
+The Welsh Government oversees the country's healthcare system, which is different from that of the rest of the UK. In Wales, an institution designated as a "Local Health Board" (LHB) is in charge of providing all NHS healthcare services within a particular geographic region.
+
+Planning and executing NHS services in their respective regions is the responsibility of local health boards. These medical services consist of:
+
+- pharmacy
+- dental
+- optical, and mental health
+
+They also bear accountability for:
+
+- enhancing the results of physical and mental health
+- promoting well being
+- decreasing disparities in population health
+- contracting outside organizations to provide services in order to address residents' needs
+
+(NHS Wales Health Boards and Trusts | GOV.WALES, 2023)
+
+Ref: NHS Wales health boards and trusts | GOV.WALES. (2023, February 3). GOV.WALES. https://www.gov.wales/nhs-wales-health-boards-and-trusts
+
 
 ```{r}
 data2_hts <- data_grouped %>%
@@ -279,17 +351,17 @@ stl_df_tidy %>%
 
 ```
 
-Findings:
+- Findings:
 
-1. Trend:
+**1. Trend:**
 There appears to be an upward trend in the number of ED visits over time for all LHBs, but there are outliers.
 The most obvious decline occurs around 2020, which may be a sign of the COVID-19 pandemic's effects.
 
-2. Seasonality:
+**2. Seasonality:**
 The seasonal component illustrates the periodicity in ED attendances by showing predictable patterns that repeat annually.
 There is a pronounced surge in the number of patient's attendance in the middle of the year (approximately in June or July). This seasonal pattern underlines the recurrent nature of patient admissions.
 
-3. Residuals:
+**3. Residuals:**
 The residuals are the data's unexplained variation after the trend and seasonal components have been removed.
 The majority of LHBs have residuals that oscillate near zero, which shows that the STL decomposition has effectively caught the main trends in the data.
 
@@ -340,9 +412,9 @@ ggplot(data_gts, aes(x = Grouped_Age, y = Number)) +
 ```
 
 
-Findings:
+- Findings:
 
-- The observation that the age group 18-69 has the most amount of patient attendance is expected, as it is the biggest group among all. However, it is noteworthy that the second biggest group are from the oldest age bracket, aligning with the general understanding of the health care need for the elders.
+It is expected that the age group 18-69 has the most amount of attendance, given the fact that it is the biggest group among all. However, the second largest group is from the oldest age bracket. It is aligned with the general understanding of that elders may need more health care. 
 
 ```{r}
 #Change the data into wide format
@@ -366,6 +438,23 @@ data2_wide <- data2_wide %>%
 
 # Forecast with ARIMA
 
+AutoRegressive Integrated Moving Average, or ARIMA, is a widely used forecasting technique for time series data. 
+
+- AutoRegressive, or AR:
+
+The link between one observation and several lag observations (prior periods or terms) is the subject of this component.
+The word "auto" denotes that the variable is being regressed against itself.
+
+- I (Integrated):
+
+This is the original data difference that is used to make the time series stationary, meaning that the data values are independent of time.
+The mean of stationary data will not change over time, and neither will the variance. It won't display seasonality or patterns.
+
+- Moving Average, or MA:
+
+This part uses a combination of earlier error terms to model the time series error.
+The MA term's intuitive purpose is to model the error.
+ 
 
 
 ```{r}
@@ -404,7 +493,7 @@ for (col in cols_to_forecast) {
 
 ## Plotting using ARIMA
 
-```{r  fig.height=4}
+```{r  fig.height=2, fig.width=3}
 
 for (col in cols_to_forecast) {
   end_year_train <- year(max(training_data$YearMonth))
@@ -417,7 +506,8 @@ for (col in cols_to_forecast) {
   
   plot_forecast <- autoplot(forecast_list[[col]]) +
     autolayer(actual_ts, series="Actual", PI=FALSE) +
-    labs(title = paste("Forecast vs Actual for", col)) +
+    labs(title = paste(col)) +
+    ylab("attendance") + 
     theme(legend.position = "bottom")
   
   print(plot_forecast)
@@ -425,6 +515,65 @@ for (col in cols_to_forecast) {
 ```
 
 # Forecasting with ETS
+
+Error, Trend, Seasonality, or ETS, is a widely used model for predicting time series data. A generalization of these techniques, the ETS model includes a variety of exponential smoothing methods.
+
+The elements of the ETS model breaks down as follows:
+
+
+**Error (E):**
+
+The error component represents the discrepancies between observed values and those predicted by a model. There are two primary types of error models: additive and multiplicative.
+
+1. **Additive Error**: 
+   - Assumes that the model's residuals (errors) are added together.
+   - Suitable when the magnitude of errors remains relatively constant regardless of the time series' level.
+
+2. **Multiplicative Error**: 
+   - Assumes that the errors change proportionally to the time series' level.
+   - Relevant when the magnitude of errors increases or decreases in proportion to the actual value of the series.
+
+Certainly! Here's a refined description of the Trend component:
+
+
+
+**Trend (T):**
+
+The trend component captures the long-term progression of a time series.
+
+1. **No Trend**: 
+   - Indicates that the time series remains relatively constant over time and does not exhibit any discernible upward or downward movement.
+
+2. **Additive Trend**: 
+   - Represents a consistent linear progression in the time series. 
+   - The series displays a steady increase or decrease at a constant amount over equal intervals of time.
+
+3. **Multiplicative Trend**: 
+   - Denotes an exponential progression in the series. 
+   - The data exhibits growth or decline at a rate that increases or decreases proportionally over time.
+
+
+**Seasonality (S):**
+
+The seasonality component captures periodic fluctuations in a time series that recur at regular intervals, such as daily, monthly, or yearly.
+
+1. **No Seasonality**: 
+   - Implies that the time series does not exhibit any periodic or recurring fluctuations. The data remains consistent throughout without any noticeable seasonal patterns.
+
+2. **Additive Seasonality**: 
+   - Suggests that seasonal patterns are consistent in magnitude throughout the time series. 
+   - The seasonal effect is added to or subtracted from the series in a constant manner, irrespective of the time series level.
+
+3. **Multiplicative Seasonality**: 
+   - Indicates that the seasonal fluctuations change in proportion to the time series' level. 
+   - As the series grows or declines, the impact of seasonality amplifies or diminishes respectively, leading to varying magnitudes of seasonal effects over time.
+
+
+
+
+
+
+
 
 ```{r}
 
@@ -442,7 +591,7 @@ for (col in cols_to_forecast) {
 ```
 
 ## Plotting with ets
-```{r  fig.height=4}
+```{r  fig.height=2, fig.width=3}
 for (col in cols_to_forecast) {
   end_year_train <- year(max(training_data$YearMonth))
   end_month_train <- month(max(training_data$YearMonth))
@@ -454,7 +603,8 @@ for (col in cols_to_forecast) {
   
   plot_forecast <- autoplot(forecast_list[[col]]) +
     autolayer(actual_ts, series="Actual", PI=FALSE) +
-    labs(title = paste("ETS Forecast vs Actual for", col)) +
+    labs(title = paste(col)) +
+    ylab("attendance") + 
     theme(legend.position = "bottom")
   
   print(plot_forecast)
@@ -463,62 +613,20 @@ for (col in cols_to_forecast) {
 ```
 
 
-
-
-
-- Conformity:
+**Conformity:**
 
 Hywel Dda, Powys Teaching, Cardiff & Vale, Grouped_4_Organisation, and Total (All-Wales): For these health boards, the ARIMA model effectively predicted the downturn that was observed in the latter portions of 2023 and successfully reflected the actual data, indicating a cogent direction. This demonstrates ARIMA's ability to effectively model and anticipate time-series data for these specific entities, despite the unpredictably fluctuating conditions brought on by the epidemic.
 
-- Contradictions:
+**Contradictions:**
 
 Aneurin Bevan and Betsi Cadwaladr: By contrast, the prediction statistics for Aneurin Bevan and Betsi Cadwaladr show a clear departure from the actual numbers. It is necessary to assess the ARIMA model's applicability and accuracy with regard to these specific datasets because there is a discrepancy between the predicted value and the real-time data.
 
 
-# Forecasting with ETS
-
-```{r}
-
-ets_forecast_list <- list()
-start_year <- year(min(training_data$YearMonth))
-start_month <- month(min(training_data$YearMonth))
-
-for (Aggregated_Organisation in cols_to_forecast) {
-  ts_data <- ts(training_data[[Aggregated_Organisation]], start = c(start_year, start_month), frequency = 12)
-  ets_model <- ets(ts_data) 
-  forecast_list[[Aggregated_Organisation]] <- forecast(ets_model, h = h)
-}
-
-
-```
-
-
-
-## Plotting with ets
-```{r  fig.height=4}
-for (col in cols_to_forecast) {
-  end_year_train <- year(max(training_data$YearMonth))
-  end_month_train <- month(max(training_data$YearMonth))
-  
-  start_year_test <- ifelse(end_month_train == 12, end_year_train + 1, end_year_train)
-  start_month_test <- ifelse(end_month_train == 12, 1, end_month_train + 1)
-  
-  actual_ts <- ts(test_data[[col]], start = c(start_year_test, start_month_test), frequency = 12)
-  
-  plot_forecast <- autoplot(forecast_list[[col]]) +
-    autolayer(actual_ts, series="Actual", PI=FALSE) +
-    labs(title = paste("ETS Forecast vs Actual for", col)) +
-    theme(legend.position = "bottom")
-  
-  print(plot_forecast)
-}
-
-```
-
+**Comparison:**
 
 Upon first glance, it appears that the ETS model offers a relatively close alignment with the real data, demonstrating a strong predictive power. When compared to the ARIMA model, the projections closely mimic the actual data patterns rather than merely following them, which suggests a possibility for greater accuracy.
 
--Consistent Decline in Predictions:
+**Findings: Consistent Decline in Predictions**
 
 Downtrend in 2023: Regardless of the model used, all forecasts uniformly point to a decline in trends during the second half of 2023. This might be explained by the historical data's apparent cyclical nature. In other words, the historical data reveals a pattern in which peaks frequently appear in the middle of the year and then descend into troughs at year's end and the beginning of the next year. This recurrent pattern may have a significant impact on the expected downturn in 2023.
 
@@ -625,16 +733,7 @@ TableAccuracyMetrics |> knitr::kable()
 
 
 
-
-
 - With Cardiff & Vale being a significant exception, most places displayed reduced error metrics when modeled with ETS, signifying a higher predictive accuracy as compared to the ARIMA model.
-
-- Model Differentiation: 
-
-ARIMA, A Time-Series Tradition Autoregressive, integrative (difference), and moving average features are included in the forecasting core components.
-The foundation is laid by differencing to make data stationary, and then autoregressive and moving average techniques are applied.
-
-ETS: A Comprehensive Method for Time-Series Model Constituent Elements reflects the seasonality, trend, and error components in time series data. Consists of rigorous detection and modeling of error, trend, and seasonal patterns within the data, which tends to include entire pattern analysis.
 
 
 - According to the interest expressed by the NHS executives, I would like to provide some insights for the error metrics according to the quality of the forecast for the non-zero count data:
@@ -672,6 +771,8 @@ Impact of a unit error is not constant across levels; for instance, a 100-unit e
 
 # Reconciliation
 
+
+
 ## Aggregate data
 
 ```{r}
@@ -680,6 +781,7 @@ data_gts <- data_grouped_age |>
   aggregate_key((Aggregated_Organisation / Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
 ```
 
+- 
 
 ```{r}
 data_gts <- data_gts %>%
@@ -694,7 +796,7 @@ library(dplyr)
 
 # Define the expected number of rows for the entire time series
 expected_length <- nrow(unique(data_gts[,"YearMonth"]))
-
+# Obtain the data for the entire time series for the purpose of reconciliation
 cleaned_data <- data_gts %>%
   group_by(Aggregated_Organisation, Grouped_Age, Hospital_ItemName_ENG) %>%
   filter(n() == expected_length) %>%
@@ -702,54 +804,9 @@ cleaned_data <- data_gts %>%
 
 ```
 
-```{r}
-library(fable.tscount)
-fit_gts <- cleaned_data %>%
- model(
-    naive_model = NAIVE(attendance),
-    ets_model = ETS(attendance),
-    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
-  )|> mutate (comb = (naive_model+ets_model+tscount)/3)  %>%
-  reconcile(
-    bu = bottom_up(comb),
-    ols = min_trace(comb, method = "ols"),
-    mint = min_trace(comb, method = "mint_shrink")
-  )
-```
-
-```{r}
-fc_gts <- fit_gts %>%
-  forecast(h = 6)
-
-```
-
-```{r}
-fc_gts |>
-  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
-  autoplot(
-    cleaned_data,
-    level = NULL
-  ) +
-  labs(y = "attendance") +
-  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-```{r}
-fc_gts |>
-  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
-  autoplot(
-    cleaned_data %>% filter(YearMonth >= yearmonth("2022 Jan")),
-    level = NULL
-  ) +
-  labs(y = "attendance") +
-  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-
 
 ## Time series cross validation
-## stretch_tsibble(.init = 135-36, .step = 1)
+## stretch_tsibble(.init = 135-12, .step = 1)
 
 ```{r}
 library(fable.tscount)
@@ -779,7 +836,7 @@ number_of_months
 
 ```
 
-135-12-12
+135-12
 ```{r}
 data_gts_tr <- cleaned_data |>
   stretch_tsibble(.init = 123, .step = 1) 
@@ -854,7 +911,6 @@ for (model in model_names) {
   averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
 }
 
-# ... [previous code remains unchanged]
 
 # Convert averaged_results to a dataframe
 averaged_df <- data.frame(model = names(averaged_results))
@@ -871,15 +927,182 @@ print(averaged_df)
 
 
 
+### Time series cross validation, set training data before Covid
+```{r}
+library(fable.tscount)
+library(tscount)
+# Split data
+training_data2 <- cleaned_data %>% 
+  filter(YearMonth <= yearmonth("2021 Jan"))
+
+test_data2 <- cleaned_data %>% 
+  filter(YearMonth > yearmonth("2021 Jan")) 
+
+test_data_filtered2 <- test_data2 %>%
+  filter(Aggregated_Organisation == "<aggregated>")
+
+```
+
+```{r}
+library(tsibble)
+
+start_date <- min(training_data2$YearMonth)
+end_date <- max(training_data2$YearMonth)
+
+# Calculate the difference in months using yearmonth
+number_of_months <- as.integer(yearmonth(end_date) - yearmonth(start_date)) + 1
+
+number_of_months
+
+```
+
+135-41
+```{r}
+data_gts_tr2 <- training_data2 |>
+  stretch_tsibble(.init = 94, .step = 1) 
+
+
+```
+
+
+```{r}
+filtered_tr2 <- data_gts_tr2 %>%
+  filter(Aggregated_Organisation == "<aggregated>")
+```
+
+
+```{r}
+data_gts_fc2 <-filtered_tr2 |>
+  model(
+    naive_model = NAIVE(attendance),
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
+  )|> mutate (comb = (naive_model+ets_model+tscount)/3) %>%
+  forecast(h = 29) 
+```
+
+
+
+
+```{r}
+
+
+merged_data2 <- left_join(as_tibble(data_gts_fc2), as_tibble(test_data_filtered2), by = c("YearMonth", "Aggregated_Organisation","Grouped_Age", "Hospital_ItemName_ENG"))
+
+# Create an empty list to store results
+results_list <- list()
+
+# List of models
+model_names <- unique(merged_data2$.model)
+
+# List of training datasets (using .id)
+training_ids <- unique(merged_data2$.id)
+
+# Nested loop: first loop through models, then loop through training datasets
+for (model in model_names) {
+  results_list[[model]] <- list()  # Initialize a nested list for each model
+  
+  for (id in training_ids) {
+    # Filter the data for the current model and training dataset
+    subset_data <- merged_data2 %>% filter(.model == model & .id == id)
+    
+    # Calculate MASE and RMSSE
+    mase_val <- mean(abs((subset_data$attendance.y - subset_data$.mean) / 
+                         (subset_data$attendance.y - lag(subset_data$attendance.y))), na.rm = TRUE)
+    rmsse_val <- sqrt(mean((subset_data$attendance.y - subset_data$.mean)^2, na.rm = TRUE))
+    
+    # Store results in the nested list
+    results_list[[model]][[as.character(id)]] <- list(MASE = mase_val, RMSSE = rmsse_val)
+  }
+}
+
+# List to store averaged results
+averaged_results <- list()
+
+for (model in model_names) {
+  # Extract the list of results for the current model
+  model_results <- results_list[[model]]
+  
+  # Calculate the average MASE and RMSSE over the 13 training datasets while removing NA values
+  avg_mase <- mean(sapply(model_results, function(x) x$MASE), na.rm = TRUE)
+  avg_rmsse <- mean(sapply(model_results, function(x) x$RMSSE), na.rm = TRUE)
+  
+  # Store the averaged results
+  averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
+}
+
+
+# Convert averaged_results to a dataframe
+averaged_df2 <- data.frame(model = names(averaged_results))
+
+# Extract Avg_MASE and Avg_RMSSE values for each model
+averaged_df2$Avg_MASE <- sapply(averaged_results, function(x) x$Avg_MASE)
+averaged_df2$Avg_RMSSE <- sapply(averaged_results, function(x) x$Avg_RMSSE)
+
+print(averaged_df2)
+
+
+
+```
+
+## Forecast
+
+```{r}
+# remove naive_model, and use comb as the base model
+library(fable.tscount)
+fit_gts <- cleaned_data %>%
+ model(
+    ets_model = ETS(attendance),
+    tscount = TSCOUNT(attendance ~ trend() + season() , link = "log", model = list(past_obs = 1:12))
+  )|> mutate (comb = (ets_model+tscount)/2)  %>%
+  reconcile(
+    bu = bottom_up(comb),
+    ols = min_trace(comb, method = "ols")
+  )
+```
+
+```{r}
+fc_gts <- fit_gts %>%
+  forecast(h = 6)
+
+```
+
+```{r}
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data,
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+```{r}
+fc_gts |>
+  filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
+  autoplot(
+    cleaned_data %>% filter(YearMonth >= yearmonth("2022 Jan")),
+    level = NULL
+  ) +
+  labs(y = "attendance") +
+  facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 
 
 
 
 
-- Base Forecasting: This technique is used to forecast straightforward time series data. Using statistical or machine learning models to extrapolate future data points based on observed past data is the main focus of this technique. Base forecasting, which is frequently applied when dealing with a single time series, tries to find patterns, trends, and seasonality in the historical data in order to produce precise and trustworthy future projections.
 
-- Reconciliation Forecasting (Hierarchical Forecasting): Reconciliation or Hierarchical forecasting is typically used when managing hierarchical or grouped time series data. It involves generating forecasts on several levels of aggregation. This process not only creates projections for each individual time series, but also reconciles the forecasts to guarantee consistency throughout the hierarchy's many levels. The forecasts may be distributed across hierarchical levels using a variety of strategies, such as top-down, bottom-up, to make sure that the projections at each level coincide with their corresponding aggregate levels. When the data contains a hierarchical structure, such as organisational, product, or geographic hierarchies, hierarchical forecasting is especially advantageous since it ensures consistent and consolidated projections at all levels.
+
+
+
+
+
+
+
 
 
 
@@ -925,4 +1148,8 @@ plot(graph,
 
 ```
 
+## Comment:
+1. use another model such as probabilistic forecasting
+2. multivariate model, try to get global variable instead of only local variables
+3. separate the training dataset before covid and after covid and see if the accuracy changes
 
