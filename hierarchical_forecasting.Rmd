@@ -22,7 +22,7 @@ options(tinytex.verbose = TRUE)
 
 
 ```{r include = FALSE, echo = FALSE, message = FALSE, warning = FALSE}
-# Required Libraries
+
 library(zoo)
 library(ggplot2)
 library(lubridate)
@@ -42,7 +42,8 @@ library(dplyr)
 library(igraph)
 library(ggraph)
 library(feasts)
-
+library(fable.tscount)
+library(tscount)
 ```
 
 
@@ -129,9 +130,58 @@ The dataset contains variables related to monthly Emergency Attendances in hospi
 
 There are three hierarchies in this dataset:
 - On the top level, there is all the hospitals in Wales.
-- On the second level, there are the different LHB.
+- On the second level, there are the different LHB, which are "Betsi Cadwaladr","Hywel Dda", "Swansea Bay", "Abertawe Bro Morgannwg", "Cardiff & Vale","Cwm Taf Morgannwg", "Cwm Taf", "Aneurin Bevan" and "Powys Teaching". They will be grouped into 6 LHB later on, I will provide explanation in the subsequent section.    
+
 - At the bottom level, there are 42 hospitals.
 
+**Introduce the hierarchical structure with graph**
+(For simplicity, I only put 5 hosptials at the bottom level, however there are 42 in total)
+```{r}
+
+
+# Nodes data
+nodes_df <- data.frame(
+  name = c("All Wales", 
+           "Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+           "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching", 
+           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital",
+           "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+# Edges data
+edges_df <- data.frame(
+  from = c(rep("All Wales", 6), 
+           rep("Betsi Cadwaladr", 5)),
+  to = c("Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
+         "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching",
+         "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
+         "Holywell Community Hospital", "Mold Community Hospital"),
+  stringsAsFactors = FALSE
+)
+
+
+graph <- graph_from_data_frame(d = edges_df, vertices = nodes_df, directed = TRUE)
+
+
+vertex_colors <- c("skyblue", rep("lightgreen", 6), rep("lightpink", 5))
+
+
+# Plot the graph
+plot(graph,
+     vertex.size = 15,
+     vertex.label = NA,  # Do not add labels
+     vertex.color = vertex_colors,
+     edge.arrow.size = 0.5,
+     layout = layout.reingold.tilford(graph, root = 1))
+legend("bottomright",
+       legend = V(graph)$name,
+       fill = vertex_colors,
+       cex = 0.5,
+       title = "Nodes",
+       box.lty = 0)
+
+```
 
 
 \newpage
@@ -208,7 +258,7 @@ They also bear accountability for:
 
 (NHS Wales Health Boards and Trusts | GOV.WALES, 2023)
 
-Ref: NHS Wales health boards and trusts | GOV.WALES. (2023, February 3). GOV.WALES. https://www.gov.wales/nhs-wales-health-boards-and-trusts
+
 
 
 ```{r}
@@ -773,7 +823,9 @@ Impact of a unit error is not constant across levels; for instance, a 100-unit e
 
 
 
-## Aggregate data
+**Aggregate data:** to aggregate data in a hierarchical structure, I set Aggregated_Organisation which is the local health board to be the parent attribute, and Hospital_ItemName_ENG as a child attribute. Additionally, I also group the patients' age by 0-4yrs, 5-17yrs, 18-69yrs, and 70 and over. The aggregate key is the patients' attendance.
+
+
 
 ```{r}
 # hierarchy with age group
@@ -781,7 +833,7 @@ data_gts <- data_grouped_age |>
   aggregate_key((Aggregated_Organisation / Hospital_ItemName_ENG) * Grouped_Age, attendance = sum(Data))
 ```
 
-- 
+
 
 ```{r}
 data_gts <- data_gts %>%
@@ -790,9 +842,9 @@ data_gts <- data_gts %>%
 
 ```
 
+**cleaned_data**: This is the new dataset I created. It only contains the hospitals which has data for the entire time series (From 2012 Apr to 2023 Jun), for the purpose of conducting the reconciliation. In other words, if the hospital does not have the whole data or contains NAs across the entire period of time, it will be unfeasible to conduct the reconciliation (the function can still run, however, it will return an empty cell for the whole time period).
 
 ```{r}
-library(dplyr)
 
 # Define the expected number of rows for the entire time series
 expected_length <- nrow(unique(data_gts[,"YearMonth"]))
@@ -806,12 +858,11 @@ cleaned_data <- data_gts %>%
 
 
 ## Time series cross validation
-## stretch_tsibble(.init = 135-12, .step = 1)
+Time series cross validation is also called rolling-forecast origin and walk-forward validation. It splits the data into training and test datasets. The training data here consists the data before 2022 Jun, and the test data consists the remaining which is from 2022 July to 2023 Jun (1 year). Just as its other name "rolling-forecast origin", the iteration process performs with a model trained on the initial training data and will be used to make a forecast for the next period. And the actual observation will be added to the training set for the next step.
 
 ```{r}
-library(fable.tscount)
-library(tscount)
-# Split data
+
+
 training_data <- cleaned_data %>% 
   filter(YearMonth <= yearmonth("2022 Jun"))
 
@@ -823,6 +874,8 @@ test_data_filtered <- test_data %>%
 
 ```
 
+
+The number of months in the training data is 123 months.
 ```{r}
 library(tsibble)
 
@@ -836,7 +889,11 @@ number_of_months
 
 ```
 
-135-12
+**Reasons to conduct the cross validation on the entire time period**
+The time series cross validation is conducted on the cleaned_data which has the entire time period due to the fact that I would also like to analyse the effect resulted by Covid-19. Even though Covid-19 was an outburst and seemed to be a sudden accident, the emergency department has to get prepared if there is another outbreak like this.
+
+There are 13 training data when I set the .init = 135(the total time points) -12(test data). Stretch_tsibble will automatically generate a column called .id and there are 13 different ids.
+
 ```{r}
 data_gts_tr <- cleaned_data |>
   stretch_tsibble(.init = 123, .step = 1) 
@@ -844,12 +901,17 @@ data_gts_tr <- cleaned_data |>
 
 ```
 
+**Reasons to filter the data**
+
+I chose to analyse the data only for the aggregated level due to the computational constraints. In other words, R consistently terminated itself when I use the entire data to run the accuracy test. The accuracy test was conducted by taking the forecast for 12 time points and compare it with the test data which contains the actual data.
 
 ```{r}
 filtered_tr <- data_gts_tr %>%
   filter(Aggregated_Organisation == "<aggregated>")
 ```
 
+**4 models for generating the forecast**
+I conducted the forecast with 4 models, naive model, ets, tscount and a combination of all three models called "comb". 
 
 ```{r}
 data_gts_fc <-filtered_tr |>
@@ -863,59 +925,44 @@ data_gts_fc <-filtered_tr |>
 
 
 
+**Accuracy metrics for 4 different models** 
 
 ```{r}
 
 
 merged_data <- left_join(as_tibble(data_gts_fc), as_tibble(test_data_filtered), by = c("YearMonth", "Aggregated_Organisation","Grouped_Age", "Hospital_ItemName_ENG"))
 
-# Create an empty list to store results
+
 results_list <- list()
 
-# List of models
 model_names <- unique(merged_data$.model)
 
-# List of training datasets (using .id)
 training_ids <- unique(merged_data$.id)
 
-# Nested loop: first loop through models, then loop through training datasets
+
 for (model in model_names) {
-  results_list[[model]] <- list()  # Initialize a nested list for each model
+  results_list[[model]] <- list()  
   
   for (id in training_ids) {
-    # Filter the data for the current model and training dataset
     subset_data <- merged_data %>% filter(.model == model & .id == id)
-    
-    # Calculate MASE and RMSSE
     mase_val <- mean(abs((subset_data$attendance.y - subset_data$.mean) / 
                          (subset_data$attendance.y - lag(subset_data$attendance.y))), na.rm = TRUE)
     rmsse_val <- sqrt(mean((subset_data$attendance.y - subset_data$.mean)^2, na.rm = TRUE))
     
-    # Store results in the nested list
     results_list[[model]][[as.character(id)]] <- list(MASE = mase_val, RMSSE = rmsse_val)
   }
 }
 
-# List to store averaged results
 averaged_results <- list()
 
 for (model in model_names) {
-  # Extract the list of results for the current model
   model_results <- results_list[[model]]
-  
-  # Calculate the average MASE and RMSSE over the 13 training datasets while removing NA values
   avg_mase <- mean(sapply(model_results, function(x) x$MASE), na.rm = TRUE)
   avg_rmsse <- mean(sapply(model_results, function(x) x$RMSSE), na.rm = TRUE)
-  
-  # Store the averaged results
   averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
 }
 
-
-# Convert averaged_results to a dataframe
 averaged_df <- data.frame(model = names(averaged_results))
-
-# Extract Avg_MASE and Avg_RMSSE values for each model
 averaged_df$Avg_MASE <- sapply(averaged_results, function(x) x$Avg_MASE)
 averaged_df$Avg_RMSSE <- sapply(averaged_results, function(x) x$Avg_RMSSE)
 
@@ -925,13 +972,19 @@ print(averaged_df)
 
 ```
 
+**Interpretation for the accuracy metrics**
+
+The error metrics MASE and RMSSE usually take naive model as a benchmark which means these metrics compare others with naive model. Therefore, I also applied this concept. The result reveals that 'ets', 'tscount' and the combination of naive, 'ets' and 'tscount' all outperform the naive model. Given this insight, I excluded naive model for the subsequent reconciliation process.
+
 
 
 ### Time series cross validation, set training data before Covid
+
+**Suggestions of setting the training data before Covid**
+Some professors and NHS-Wales executives suggested me to do the forecast before the Covid-19 outbreak. Due to the stretch_tsibble function, I needed to set the training data one year later in order to obtain desired forecast period (2020 Feb to 2023 Jun), which I believe that this is a bug that needs to be solved in the stretch_tsibble function, I will consult the developer about it later on. Check data_gts_fc2 for the forecasting period in the column of YearMonth.
+
 ```{r}
-library(fable.tscount)
-library(tscount)
-# Split data
+
 training_data2 <- cleaned_data %>% 
   filter(YearMonth <= yearmonth("2021 Jan"))
 
@@ -939,24 +992,25 @@ test_data2 <- cleaned_data %>%
   filter(YearMonth > yearmonth("2021 Jan")) 
 
 test_data_filtered2 <- test_data2 %>%
-  filter(Aggregated_Organisation == "<aggregated>")
+  filter(is_aggregated(Aggregated_Organisation))
 
 ```
 
 ```{r}
-library(tsibble)
+
 
 start_date <- min(training_data2$YearMonth)
 end_date <- max(training_data2$YearMonth)
 
-# Calculate the difference in months using yearmonth
 number_of_months <- as.integer(yearmonth(end_date) - yearmonth(start_date)) + 1
 
 number_of_months
 
 ```
 
-135-41
+**Reasons to set the .init =94**
+This comes from the number of months(106) minus 12 (which I want the number of training data to be).
+
 ```{r}
 data_gts_tr2 <- training_data2 |>
   stretch_tsibble(.init = 94, .step = 1) 
@@ -965,9 +1019,11 @@ data_gts_tr2 <- training_data2 |>
 ```
 
 
+
+
 ```{r}
 filtered_tr2 <- data_gts_tr2 %>%
-  filter(Aggregated_Organisation == "<aggregated>")
+  filter(is_aggregated (Aggregated_Organisation))
 ```
 
 
@@ -989,53 +1045,34 @@ data_gts_fc2 <-filtered_tr2 |>
 
 merged_data2 <- left_join(as_tibble(data_gts_fc2), as_tibble(test_data_filtered2), by = c("YearMonth", "Aggregated_Organisation","Grouped_Age", "Hospital_ItemName_ENG"))
 
-# Create an empty list to store results
 results_list <- list()
 
-# List of models
 model_names <- unique(merged_data2$.model)
 
-# List of training datasets (using .id)
 training_ids <- unique(merged_data2$.id)
 
-# Nested loop: first loop through models, then loop through training datasets
 for (model in model_names) {
-  results_list[[model]] <- list()  # Initialize a nested list for each model
-  
+  results_list[[model]] <- list()  
   for (id in training_ids) {
-    # Filter the data for the current model and training dataset
     subset_data <- merged_data2 %>% filter(.model == model & .id == id)
     
-    # Calculate MASE and RMSSE
     mase_val <- mean(abs((subset_data$attendance.y - subset_data$.mean) / 
                          (subset_data$attendance.y - lag(subset_data$attendance.y))), na.rm = TRUE)
     rmsse_val <- sqrt(mean((subset_data$attendance.y - subset_data$.mean)^2, na.rm = TRUE))
-    
-    # Store results in the nested list
     results_list[[model]][[as.character(id)]] <- list(MASE = mase_val, RMSSE = rmsse_val)
   }
 }
 
-# List to store averaged results
 averaged_results <- list()
 
 for (model in model_names) {
-  # Extract the list of results for the current model
   model_results <- results_list[[model]]
-  
-  # Calculate the average MASE and RMSSE over the 13 training datasets while removing NA values
   avg_mase <- mean(sapply(model_results, function(x) x$MASE), na.rm = TRUE)
   avg_rmsse <- mean(sapply(model_results, function(x) x$RMSSE), na.rm = TRUE)
-  
-  # Store the averaged results
   averaged_results[[model]] <- list(Avg_MASE = avg_mase, Avg_RMSSE = avg_rmsse)
 }
 
-
-# Convert averaged_results to a dataframe
 averaged_df2 <- data.frame(model = names(averaged_results))
-
-# Extract Avg_MASE and Avg_RMSSE values for each model
 averaged_df2$Avg_MASE <- sapply(averaged_results, function(x) x$Avg_MASE)
 averaged_df2$Avg_RMSSE <- sapply(averaged_results, function(x) x$Avg_RMSSE)
 
@@ -1045,11 +1082,17 @@ print(averaged_df2)
 
 ```
 
-## Forecast
+**Interpretation for the result**
+
+According to the MASE and RMSSE, tscount performs the worst, only the ets model performs better than the naive model. However, all of them did not perform as well as the previous analysis. Therefore, I would continue my analysis with the training data from 2012 Apr to 2022 Jun for the subsequent analysis. Nevertheless, the result is to my surprise, as I first thought that without the Covid-19 period data, the variability would be less and could instead provide a more precise prediction, however, the result for the accuracy suggested otherwise. I reckon the lower accuracy is due to that splitting the training data before covid-19 will result in the need of forecasting for the this period, and it then leads to a lower accuracy because Covid-19 period is basically impossible to be forecasted.
+
+I also thought about excluding the Covid-19 period from the data, however, first of all, it is hard to define when the Covid-19 period ended as the data shows that it ended around 2022 Jan, however, Australia's Chief Medical Officer declared that Covid-19 is no longer a Communicable Disease Incident of National Significance (CDINS) until 20th October 2023(Australian Government Department of Health and Aged Care, 2023).  Secondly, the trend and the pattern are ignored if excluding the Covid-19 period. Even though there was a significant drop during the period, there was overall still an upward trend after Covid-19 which we can see from the plot that the attendance raised back up. Therefore, simply excluding the data during the Covid-19 era is not a good idea in my opinion.
+
+
+## Forecast with the training data from 2012 Apr to 2022 Jun
 
 ```{r}
 # remove naive_model, and use comb as the base model
-library(fable.tscount)
 fit_gts <- cleaned_data %>%
  model(
     ets_model = ETS(attendance),
@@ -1061,6 +1104,8 @@ fit_gts <- cleaned_data %>%
   )
 ```
 
+**Forecast horizon**
+The goal of this project is to forecast the 6 months ahead of the emergency department attendance; hence, the forecast horizon equals to 6.
 ```{r}
 fc_gts <- fit_gts %>%
   forecast(h = 6)
@@ -1078,6 +1123,14 @@ fc_gts |>
   facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+**Interpretation for the reconciliation result**
+I mentioned the overall trend and seasonality in the previous analysis. According to the plot above, it aligns with the result from the exploratory analysis. To give more details for the reconciliation,
+bu refers to "bottom-up" forecasting, it is an approach that reconciles from the most detailed/bottom level. Additionally, ols stands for ordinary least squares, it is a type of linear regression analysis. Both of them are the reconciliation methods for the hierarchical and grouped time series data. Other methods such as comb, ets and tscount are simply used for the base forecasting.
+
+
+
+**A closer look**
+
 ```{r}
 fc_gts |>
   filter(is_aggregated(Hospital_ItemName_ENG), is_aggregated(Grouped_Age)) |>
@@ -1089,67 +1142,83 @@ fc_gts |>
   facet_wrap(vars(Aggregated_Organisation), scales = "free_y")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+**Downward trend**
+The base forecasting and the reconciliation forecasting both show a downward trend for the future 6 months. After the discussion with the NHS-Wales executive, we concluded that this might be due to the seasonal effect that there always seems to have a peak in the middle of the year and a trough in the end of the year. The other reason is so called the holiday effect, which points out that patients are reluctant to visit the hospital during Christmas or New Year as they would like to spend more time with family and friends during the special season. However, this might also be contradictory as during the holidays in the year, it is usually that emergency department is the only department that is open. Therefore, we might need to include some global variables into this, and create a multivariate regression to discover what is actually happening during the later half of the year.  
 
 
 
+# Comments on this project and what can be done in the future?
+
+I find this project very interesting as it is very close to our daily lives. Emergency and accidents happen all the time. My goal for this project is to provide some forecast and information to give the hospitals, local health boards and NHS-Wales some insights. So the health care system can be more prepared for the coming future. Additionally, they can also be more insightful when allocating the budget and adjusting the health care policy for the future purpose. In addition to this, NHS-Wales can use the forecast model and code I provide to produce the forecast for more than 6 months ahead if they would like to make the use of it.
+
+Furthermore, this is my first time conducting the hierarchical forecasting, and I really learnt a lot from it, such as the skill to cope with hierarchical time series or grouped time series data. I believe with the additional skill I equipped from this project and unit, I can be more qualified to conduct the forecasting analysis in the future. It will be really useful in the data analytics field.
+
+However, from the analysis, even though the models show a fairly good accuracy. It might be more insightful if there is another model such as probabilistic model which can take parameters such as holidays or any other outbreaks (for example, flu season) to create a multivariate model. Additional information is that for some specific days, only Emergency Department is open, and therefore, there should be more people visiting. However, we cannot observe the pattern from the given data. Therefore, another thing that can be done is to include a more detailed data, for instance, to include global variable.
+
+# References
+
+Australian Government Department of Health and Aged Care. (2023, October 20). AHPPC statement – End of COVID-19 emergency response. https://www.health.gov.au/news/ahppc-statement-end-of-covid-19-emergency-response
 
 
+Csardi G, Nepusz T (2006). “The igraph software package for complex network research.”
+  _InterJournal_, *Complex Systems*, 1695. <https://igraph.org>.
+
+Garrett Grolemund, Hadley Wickham (2011). Dates and Times Made Easy with lubridate.
+  Journal of Statistical Software, 40(3), 1-25. URL https://www.jstatsoft.org/v40/i03/.
+
+H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+
+Hamner B, Frasco M (2018). _Metrics: Evaluation Metrics for Machine Learning_. R package
+  version 0.1.4, <https://CRAN.R-project.org/package=Metrics>.
 
 
+Hyndman R (2023). _fpp3: Data for "Forecasting: Principles and Practice" (3rd Edition)_. R
+  package version 0.5, <https://CRAN.R-project.org/package=fpp3>.
+  
+Hyndman R, Athanasopoulos G, Bergmeir C, Caceres G, Chhay L, O'Hara-Wild M, Petropoulos F,
+  Razbash S, Wang E, Yasmeen F (2023). _forecast: Forecasting functions for time series and
+  linear models_. R package version 8.21.1, <https://pkg.robjhyndman.com/forecast/>.  
+  
+Hyndman R, Lee A, Wang E, Wickramasuriya S (2021). _hts: Hierarchical and Grouped Time
+  Series_. R package version 6.0.2, <https://CRAN.R-project.org/package=hts>.  
+  
+Liboschik T, Fokianos K, Fried R (2017). “tscount: An R Package for Analysis of Count Time
+  Series Following Generalized Linear Models.” _Journal of Statistical Software_, *82*(5),
+  1-51. doi:10.18637/jss.v082.i05 <https://doi.org/10.18637/jss.v082.i05>.  
+  
+NHS Wales health boards and trusts | GOV.WALES. (2023, February 3). GOV.WALES. https://www.gov.wales/nhs-wales-health-boards-and-trusts
+  
+O'Hara-Wild M, Hyndman R, Wang E (2023). _fable: Forecasting Models for Tidy Time Series_.
+  R package version 0.3.3, <https://CRAN.R-project.org/package=fable>.  
+  
+O'Hara-Wild M, Hyndman R, Wang E (2023). _feasts: Feature Extraction and Statistics for
+  Time Series_. R package version 0.3.1, <https://CRAN.R-project.org/package=feasts>.  
+  
+Pedersen T (2022). _ggraph: An Implementation of Grammar of Graphics for Graphs and
+  Networks_. R package version 2.1.0, <https://CRAN.R-project.org/package=ggraph>.  
+  
+R Core Team (2022). R: A language and environment for statistical computing. R Foundation
+  for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.  
 
-
-
-
-
-
-
-
-
-
-
-```{r}
-library(igraph)
-
-# Nodes data
-nodes_df <- data.frame(
-  name = c("All Wales", 
-           "Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
-           "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching", 
-           "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
-           "Holywell Community Hospital", "Mold Community Hospital"),
-  stringsAsFactors = FALSE
-)
-
-# Edges data
-edges_df <- data.frame(
-  from = c(rep("All Wales", 6), 
-           rep("Betsi Cadwaladr", 5)),
-  to = c("Betsi Cadwaladr", "Hywel Dda", "Grouped_4_organisation", 
-         "Cardiff & Vale", "Aneurin Bevan", "Powys Teaching",
-         "Ysbyty Glan Clwyd", "Wrexham Maelor Hospital", "Colwyn Bay Community Hospital", 
-         "Holywell Community Hospital", "Mold Community Hospital"),
-  stringsAsFactors = FALSE
-)
-
-# Creating graph object
-graph <- graph_from_data_frame(d = edges_df, vertices = nodes_df, directed = TRUE)
-
-# Color vector: 1 color for "All Wales", 6 colors for organisations, and 5 colors for hospitals
-vertex_colors <- c("skyblue", rep("lightgreen", 6), rep("lightpink", 5))
-
-# Plot the graph
-plot(graph, 
-     vertex.size = 15, 
-     vertex.label.cex = 0.6,  
-     vertex.color = vertex_colors,  
-     edge.arrow.size = 0.5, 
-     vertex.label.degree = pi/4, # 45-degree label rotation
-     layout = layout.reingold.tilford(graph, root = 1))
-
-```
-
-## Comment:
-1. use another model such as probabilistic forecasting
-2. multivariate model, try to get global variable instead of only local variables
-3. separate the training dataset before covid and after covid and see if the accuracy changes
-
+Wang, E, D Cook, and RJ Hyndman (2020). A new tidy data structure to support exploration
+  and modeling of temporal data, Journal of Computational and Graphical Statistics, 29:3,
+  466-478, doi:10.1080/10618600.2019.1695624.
+  
+Wickham H, Averick M, Bryan J, Chang W, McGowan LD, François R, Grolemund G, Hayes A,
+  Henry L, Hester J, Kuhn M, Pedersen TL, Miller E, Bache SM, Müller K, Ooms J, Robinson D,
+  Seidel DP, Spinu V, Takahashi K, Vaughan D, Wilke C, Woo K, Yutani H (2019). “Welcome to
+  the tidyverse.” _Journal of Open Source Software_, *4*(43), 1686. doi:10.21105/joss.01686
+  <https://doi.org/10.21105/joss.01686>.  
+  
+Wickham H, François R, Henry L, Müller K, Vaughan D (2023). _dplyr: A Grammar of Data
+  Manipulation_. R package version 1.1.3, <https://CRAN.R-project.org/package=dplyr>. 
+  
+Wickham H, Henry L (2023). _purrr: Functional Programming Tools_. R package version 1.0.2,
+  <https://CRAN.R-project.org/package=purrr>.  
+  
+Wickham H, Vaughan D, Girlich M (2023). _tidyr: Tidy Messy Data_. R package version 1.3.0,
+  <https://CRAN.R-project.org/package=tidyr>.
+  
+Zeileis A, Grothendieck G (2005). “zoo: S3 Infrastructure for Regular and Irregular Time
+  Series.” _Journal of Statistical Software_, *14*(6), 1-27. doi:10.18637/jss.v014.i06
+  <https://doi.org/10.18637/jss.v014.i06>.
