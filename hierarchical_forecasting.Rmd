@@ -1215,6 +1215,8 @@ O'Hara-Wild M, Hyndman R, Wang E (2023). _fable: Forecasting Models for Tidy Tim
 O'Hara-Wild M, Hyndman R, Wang E (2023). _feasts: Feature Extraction and Statistics for
   Time Series_. R package version 0.3.1, <https://CRAN.R-project.org/package=feasts>.  
   
+OpenAI. (2023). ChatGPT (Feb 13 version) [Large language model]. https://chat.openai.com  
+  
 Pedersen T (2022). _ggraph: An Implementation of Grammar of Graphics for Graphs and
   Networks_. R package version 2.1.0, <https://CRAN.R-project.org/package=ggraph>.  
   
