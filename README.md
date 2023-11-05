@@ -1,4 +1,4 @@
-# Please refer to the hierarchical_forecasting.Rmd and hierarchical_forecasting.pdf
+Please refer to the hierarchical_forecasting.Rmd and hierarchical_forecasting.pdf
 
 # Introduction
 
@@ -24,3 +24,5 @@ By doing this, I hope to create a system that synchronises policymakers' project
 2. Provide evidence for why hierarchical time series methods are superior than other forecasting methods.
 3. Offer a scalable, transparent method that can be used by other NHS departments.
 
+# A sneak peek of the result
+<img width="937" alt="Screenshot 2023-11-05 at 5 45 37 PM" src="https://github.com/JaniceHsinHSU/NHS_forecast/assets/80805593/1af5f2ff-6657-4301-acb3-85b1083c9037">
