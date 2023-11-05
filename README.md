@@ -29,7 +29,9 @@ By doing this, I hope to create a system that synchronises policymakers' project
 
 # Special thanks
 
-Dr Aura Frizzati, from the NHS-Wales, UK
-Prof. Bahman Rostami-Tabar, from the Cardiff Business School.
-Prof. Damjan Vukcevic, from the Monash University.
+- Dr Aura Frizzati, from the NHS-Wales, UK
+
+- Prof. Bahman Rostami-Tabar, from the Cardiff Business School.
+
+- Prof. Damjan Vukcevic, from the Monash University.
 
