@@ -53,15 +53,15 @@ data <- read.csv("HLTH0037_ts_cleaned.csv")
 
 # Abstract
 
-## Introduction:
+## Introduction
 
 National Health Service (NHS) Wales employs several time series forecasting techniques. In order to support the processes for planning and decision-making, both strategically (at All Wales level) and operationally (at local health board level). However, using base forecasting to analyse individual time series and the aggregated level can cause inconsistencies. Therefore, hierarchical time series forecasting method is to be used in this study. 
 
-## Background:
+## Background
 
 The COVID-19 outbreak created unexpected difficulties of the forecasting for the attendance of Emergency Department in NHS-Wales. Therefore, NHS-Wales is seeking a reliable and consistent forecasting model regardless of the shifting patterns of patients’ arrivals during the lockdowns and health policy changes. 
 
-## Goal:
+## Goal
 
 This project's main goal is to create a forecasting models for emergency departments that can consistently deliver outcomes at the individual hospital, each local health board, and national levels. The research will allow for a comparison of:
 
@@ -71,22 +71,21 @@ This project's main goal is to create a forecasting models for emergency departm
 By doing this, I hope to create a system that synchronises policymakers' projections with operational forecasts, guaranteeing an efficient decision-making process.
 
 
-## Techniques:
+## Techniques
 
-I will use NHS Wales publicly available data, with an emphasis on emergency departments. The information will be split up into the subsequent sections:
+The data is obtained from the StatsWales website and it is publicly accessible.
 
-1. National Level Data: This will include all of the information from Wales' emergency departments combined.
-2. Local Health Board Data: This will include distinct local health boards which operate individual hospitals.
-3. Individual Hospital Data: This will be divided according to distinct hospital.
+Data source: https://statswales.gov.wales/Catalogue/Health-and-Social-Care/NHS-Hospital-Waiting-Times/emergency-department/emergencyattendances-by-age-sex-site
 
-I'll use the following predicting techniques on the information:
+The data will be split up into the subsequent sections:
 
-- The national data will be subjected to traditional time series forecasting.
-- Summed projections: To get at a nationwide total, individual projections for each hospital and local health boards will be made and then added together.
+I'll use the following forecasting techniques:
+
+- Base forecasting: I use base forecasting mainly for the attendance under the different local health boards, in order to conduct the exploratory analysis and also to determine which model is a better fit for the data.
 - Hierarchical Time Series Forecasting: This method models the data in accordance with the underlying hierarchy in the data (national(Wales), local health boards, hospital).
 
 
-## Differences between base forecasting and hierarchical forecasting:
+## Differences between base forecasting and hierarchical forecasting
 
 - Base forecasting: It is used to forecast simple time series data with statistical or machine learning methods. To generate future data, base forecasting observes the historical data, and finds its pattern, trend and seasonality to produce future projections.
 
@@ -94,7 +93,7 @@ I'll use the following predicting techniques on the information:
 - Reconciliation Forecasting (Hierarchical Forecasting): It is used when dealing with hierarchical or grouped time series data. Hierarchical forecasting involves generating forecast on different levels of aggregation. It doesn't only create projections for individual time series, but also reconciles the forecasts to guarantee consistency under multiple hierarchical levels. This method exploits a variety of strategies, such as top down, bottom up, to ensure that the individual projections align with their corresponding aggregated levels. This leads the hierarchical forecasting advantageous due to the fact that it can make sure the consistent and consolidated projections at all levels.
 
 
-## Anticipated Results:
+## Anticipated Results
 
 
 1. Determine the most reliable and accurate forecasting method for the attendance number for emergency departments in Wales.
@@ -104,7 +103,7 @@ I'll use the following predicting techniques on the information:
 
 \newpage
 
-## Data Introduction
+# Data Introduction
 
 The dataset contains variables related to monthly Emergency Attendances in hospitals in Wales, UK. The data was publicly available and retrieved from StatsWales.
 
@@ -134,7 +133,7 @@ There are three hierarchies in this dataset:
 
 - At the bottom level, there are 42 hospitals.
 
-**Introduce the hierarchical structure with graph**
+## Introduce the hierarchical structure with graph
 (For simplicity, I only put 5 hosptials at the bottom level, however there are 42 in total)
 ```{r}
 
@@ -216,6 +215,8 @@ data_hts |>
         axis.text.y = element_text(angle = 0, hjust = 1)) 
 ```
 
+**Explanation for the change of local health boards (LHB)**
+
 As already mentioned, two LHBs were redefined from the 1st of April 2019 onwards: Cwm Taf ((# hospitals = 27)--> Cwm Taf Morgannwg ((# hospitals = 30)// Abertawe Bro Morgannwg ((# hospitals = 26) --> Swansea Bay ((# hospitals = 31). 
 
 Since the number of hospitals included before and after the change in each LHB was different, these 4 organisations were aggregated into one unique group to enable their inclusion in the forecasting analysis (defined as “Grouped_4_organisation”in the code snippets).
@@ -241,6 +242,7 @@ unique(data_grouped$Aggregated_Organisation)
 ```
 
 **What are Local Health Board?**
+
 The Welsh Government oversees the country's healthcare system, which is different from that of the rest of the UK. In Wales, an institution designated as a "Local Health Board" (LHB) is in charge of providing all NHS healthcare services within a particular geographic region.
 
 Planning and executing NHS services in their respective regions is the responsibility of local health boards. These medical services consist of:
@@ -286,7 +288,7 @@ data2_hts |>
 
 **Analysing Health Board Attendance Trends Amidst and Post-COVID-19:**
 
-Healthcare systems around the world faced significant difficulties during the COVID-19 epidemic, which caused them to quickly shift into crisis-response mode. Intriguing trends during and after the epidemic era have been revealed by a thorough review of attendance data from local health boards.
+Healthcare systems around the world faced significant difficulties during the COVID-19 pandemic, which caused them to quickly shift into crisis-response mode. Intriguing trends during and after the epidemic era have been revealed by a thorough review of attendance data from local health boards.
 
 - During the pandemic:
 
@@ -342,7 +344,7 @@ In comparison to similar months in past years, the majority of LHBs appear to ha
 
 
 
-### Decompose Time Series
+## Decompose Time Series
 
 ```{r}
 
@@ -374,7 +376,7 @@ stl_df$YearMonth <- rep(unique(data2_hts$YearMonth), times = num_orgs)
 
 ```
 
-### Plotting
+## Plotting
 
 ```{r}
 stl_df_tidy <- stl_df %>%
@@ -423,12 +425,13 @@ The majority of LHBs have residuals that oscillate near zero, which shows that t
 
 ## Change the Age_Code structure into different groups for simplicity and interpretability
 
+**The original age groups**
 ```{r}
 unique(data_grouped$Age_Code)
 ```
 
 
-### Age group: "0-4", "5-17", "18-69", "70^"
+**New age group**
 ```{r}
 data_grouped_age <- data_grouped %>%
   filter(Age_Code != "Unknown") %>%
@@ -442,6 +445,10 @@ data_grouped_age <- data_grouped %>%
     TRUE ~ "Other"
   ))
 
+```
+
+```{r}
+unique(data_grouped_age$Grouped_Age)
 ```
 
 
@@ -583,7 +590,7 @@ The error component represents the discrepancies between observed values and tho
    - Assumes that the errors change proportionally to the time series' level.
    - Relevant when the magnitude of errors increases or decreases in proportion to the actual value of the series.
 
-Certainly! Here's a refined description of the Trend component:
+
 
 
 
@@ -805,6 +812,7 @@ TableAccuracyMetrics |> knitr::kable()
    - **Cons**: It does not emphasize large errors.
 
 **However, RMSE and MAE should not be used for the hierarchical time series data.**
+
 And here is why:
 
 - **1. Consistency Between Levels:**
@@ -875,7 +883,7 @@ test_data_filtered <- test_data %>%
 ```
 
 
-The number of months in the training data is 123 months.
+The number of months in the training data is:
 ```{r}
 library(tsibble)
 
@@ -890,6 +898,7 @@ number_of_months
 ```
 
 **Reasons to conduct the cross validation on the entire time period**
+
 The time series cross validation is conducted on the cleaned_data which has the entire time period due to the fact that I would also like to analyse the effect resulted by Covid-19. Even though Covid-19 was an outburst and seemed to be a sudden accident, the emergency department has to get prepared if there is another outbreak like this.
 
 There are 13 training data when I set the .init = 135(the total time points) -12(test data). Stretch_tsibble will automatically generate a column called .id and there are 13 different ids.
@@ -911,6 +920,7 @@ filtered_tr <- data_gts_tr %>%
 ```
 
 **4 models for generating the forecast**
+
 I conducted the forecast with 4 models, naive model, ets, tscount and a combination of all three models called "comb". 
 
 ```{r}
@@ -981,6 +991,7 @@ The error metrics MASE and RMSSE usually take naive model as a benchmark which m
 ### Time series cross validation, set training data before Covid
 
 **Suggestions of setting the training data before Covid**
+
 Some professors and NHS-Wales executives suggested me to do the forecast before the Covid-19 outbreak. Due to the stretch_tsibble function, I needed to set the training data one year later in order to obtain desired forecast period (2020 Feb to 2023 Jun), which I believe that this is a bug that needs to be solved in the stretch_tsibble function, I will consult the developer about it later on. Check data_gts_fc2 for the forecasting period in the column of YearMonth.
 
 ```{r}
@@ -996,6 +1007,8 @@ test_data_filtered2 <- test_data2 %>%
 
 ```
 
+The number of months in the training data is:
+
 ```{r}
 
 
@@ -1009,6 +1022,7 @@ number_of_months
 ```
 
 **Reasons to set the .init =94**
+
 This comes from the number of months(106) minus 12 (which I want the number of training data to be).
 
 ```{r}
@@ -1105,7 +1119,9 @@ fit_gts <- cleaned_data %>%
 ```
 
 **Forecast horizon**
+
 The goal of this project is to forecast the 6 months ahead of the emergency department attendance; hence, the forecast horizon equals to 6.
+
 ```{r}
 fc_gts <- fit_gts %>%
   forecast(h = 6)
@@ -1124,6 +1140,7 @@ fc_gts |>
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 **Interpretation for the reconciliation result**
+
 I mentioned the overall trend and seasonality in the previous analysis. According to the plot above, it aligns with the result from the exploratory analysis. To give more details for the reconciliation,
 bu refers to "bottom-up" forecasting, it is an approach that reconciles from the most detailed/bottom level. Additionally, ols stands for ordinary least squares, it is a type of linear regression analysis. Both of them are the reconciliation methods for the hierarchical and grouped time series data. Other methods such as comb, ets and tscount are simply used for the base forecasting.
 
@@ -1143,6 +1160,7 @@ fc_gts |>
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 **Downward trend**
+
 The base forecasting and the reconciliation forecasting both show a downward trend for the future 6 months. After the discussion with the NHS-Wales executive, we concluded that this might be due to the seasonal effect that there always seems to have a peak in the middle of the year and a trough in the end of the year. The other reason is so called the holiday effect, which points out that patients are reluctant to visit the hospital during Christmas or New Year as they would like to spend more time with family and friends during the special season. However, this might also be contradictory as during the holidays in the year, it is usually that emergency department is the only department that is open. Therefore, we might need to include some global variables into this, and create a multivariate regression to discover what is actually happening during the later half of the year.  
 
 
