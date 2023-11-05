@@ -1,4 +1,4 @@
-# Please refer to the hierarchical_forecasting.Rmd and hierarchical_forecasting.pdf
+Please refer to the hierarchical_forecasting.Rmd and hierarchical_forecasting.pdf
 
 # Introduction
 
